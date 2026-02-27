@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent Configuration",
+  "description": "Configuration for sub-agent model selection",
+  "type": "object",
+  "properties": {
+    "defaultModel": {
+      "type": "string",
+      "enum": ["haiku", "sonnet", "opus"],
+      "default": "sonnet",
+      "description": "Default model for the main agent"
+    },
+    "subAgents": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["model", "description"],
+        "properties": {
+          "model": {
+            "type": "string",
+            "enum": ["haiku", "sonnet", "opus", "inherit"],
+            "description": "Model to use for this sub-agent. 'inherit' uses the parent agent's model."
+          },
+          "description": {
+            "type": "string",
+            "description": "When to use this agent (shown to the main agent)"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Custom system prompt for this agent (optional)"
+          },
+          "tools": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Allowed tools for this agent (optional, inherits all if omitted)"
+          }
+        }
+      }
+    }
+  }
+}

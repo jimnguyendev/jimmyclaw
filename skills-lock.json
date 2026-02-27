@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": {
+    "bun-development": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "8729b190cc11927a7d4512037fc68fd4b5145b024d89764dcaf85f0ffa760e1d"
+    },
+    "drizzle": {
+      "source": "lobehub/lobehub",
+      "sourceType": "github",
+      "computedHash": "077861bcd91b781d747f0ef0d923a8329e1d0ed3326534db2cfadd07b1009e4c"
+    },
+    "mysql": {
+      "source": "planetscale/database-skills",
+      "sourceType": "github",
+      "computedHash": "5bf4e44841b184cda17678d6469274b3c691fd3a48604015d46b1f43cd6a6a09"
+    },
+    "postgres": {
+      "source": "planetscale/database-skills",
+      "sourceType": "github",
+      "computedHash": "b4f561e91e066eba314e69309e03b9a624bf7467f55a6a3818df4874aeee608e"
+    }
+  }
+}

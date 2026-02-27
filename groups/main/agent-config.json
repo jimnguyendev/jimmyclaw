@@ -1,0 +1,21 @@
+{
+  "$schema": "./agent-config.schema.json",
+  "defaultModel": "sonnet",
+  "subAgents": {
+    "researcher": {
+      "model": "haiku",
+      "description": "Search and gather information from web and files. Use for quick lookups and research tasks.",
+      "tools": ["WebSearch", "WebFetch", "Read", "Grep", "Glob"]
+    },
+    "coder": {
+      "model": "sonnet",
+      "description": "Write, modify, and debug code. Use for implementation tasks.",
+      "tools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
+    },
+    "reviewer": {
+      "model": "opus",
+      "description": "Review code quality, architecture, and security. Use for thorough analysis.",
+      "tools": ["Read", "Glob", "Grep"]
+    }
+  }
+}

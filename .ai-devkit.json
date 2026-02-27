@@ -1,0 +1,23 @@
+{
+  "version": "0.15.0",
+  "environments": [
+    "opencode"
+  ],
+  "phases": [
+    "requirements",
+    "design",
+    "planning",
+    "implementation",
+    "testing",
+    "deployment",
+    "monitoring"
+  ],
+  "createdAt": "2026-02-26T04:52:50.525Z",
+  "updatedAt": "2026-02-26T04:55:21.653Z",
+  "skills": [
+    {
+      "registry": "codeaholicguy/ai-devkit",
+      "name": "dev-lifecycle"
+    }
+  ]
+}
