@@ -363,29 +363,7 @@ async function runQuery(
   sdkEnv: Record<string, string | undefined>,
   resumeAt?: string,
 ): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean }> {
-  const stream = new MessageStream();
-  stream.push(prompt);
-
-  // Poll IPC for follow-up messages and _close sentinel during the query
-  let ipcPolling = true;
   let closedDuringQuery = false;
-  const pollIpcDuringQuery = () => {
-    if (!ipcPolling) return;
-    if (shouldClose()) {
-      log('Close sentinel detected during query, ending stream');
-      closedDuringQuery = true;
-      stream.end();
-      ipcPolling = false;
-      return;
-    }
-    const messages = drainIpcInput();
-    for (const text of messages) {
-      log(`Piping IPC message into active query (${text.length} chars)`);
-      stream.push(text);
-    }
-    setTimeout(pollIpcDuringQuery, IPC_POLL_MS);
-  };
-  setTimeout(pollIpcDuringQuery, IPC_POLL_MS);
 
   let newSessionId: string | undefined;
   let lastAssistantUuid: string | undefined;
@@ -418,52 +396,49 @@ async function runQuery(
   const agentConfig = loadAgentConfig();
   const agentsOption = buildAgentsOption(agentConfig);
 
+  // Resolve path to SDK's cli.js
+  const sdkCliPath = path.join(__dirname, '..', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js');
+
+  // Build query options - only include resume options if sessionId exists
+  const queryOptions: Parameters<typeof query>[0]['options'] = {
+    pathToClaudeCodeExecutable: sdkCliPath,
+    executable: 'bun',
+    cwd: '/workspace/group',
+    additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
+    systemPrompt: globalClaudeMd
+      ? { type: 'preset' as const, preset: 'claude_code' as const, append: globalClaudeMd }
+      : undefined,
+    allowedTools: [
+      'Bash',
+      'Read', 'Write', 'Edit', 'Glob', 'Grep',
+      'WebSearch', 'WebFetch',
+      'Task', 'TaskOutput', 'TaskStop',
+      'TeamCreate', 'TeamDelete', 'SendMessage',
+      'TodoWrite', 'ToolSearch', 'Skill',
+      'NotebookEdit',
+      'mcp__nanoclaw__*',
+      'mcp__zai-mcp-server__*',
+      'mcp__web-search-prime__*',
+      'mcp__web-reader__*',
+      'mcp__zread__*',
+      'mcp__rag-server__*'
+    ],
+    agents: agentsOption,
+    env: sdkEnv,
+    permissionMode: 'bypassPermissions',
+    allowDangerouslySkipPermissions: true,
+    settingSources: ['project', 'user'],
+  };
+
+  // Only add resume options if we have a session to resume
+  if (sessionId) {
+    queryOptions.resume = sessionId;
+    queryOptions.resumeSessionAt = resumeAt;
+  }
+
   for await (const message of query({
-    prompt: stream,
-    options: {
-      cwd: '/workspace/group',
-      additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
-      resume: sessionId,
-      resumeSessionAt: resumeAt,
-      systemPrompt: globalClaudeMd
-        ? { type: 'preset' as const, preset: 'claude_code' as const, append: globalClaudeMd }
-        : undefined,
-      allowedTools: [
-        'Bash',
-        'Read', 'Write', 'Edit', 'Glob', 'Grep',
-        'WebSearch', 'WebFetch',
-        'Task', 'TaskOutput', 'TaskStop',
-        'TeamCreate', 'TeamDelete', 'SendMessage',
-        'TodoWrite', 'ToolSearch', 'Skill',
-        'NotebookEdit',
-        'mcp__nanoclaw__*',
-        'mcp__zai-mcp-server__*',
-        'mcp__web-search-prime__*',
-        'mcp__web-reader__*',
-        'mcp__zread__*',
-        'mcp__rag-server__*'
-      ],
-      agents: agentsOption,
-      env: sdkEnv,
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
-      settingSources: ['project', 'user'],
-      mcpServers: {
-        nanoclaw: {
-          command: 'node',
-          args: [mcpServerPath],
-          env: {
-            NANOCLAW_CHAT_JID: containerInput.chatJid,
-            NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
-            NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
-          },
-        },
-      },
-      hooks: {
-        PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
-        PreToolUse: [{ matcher: 'Bash', hooks: [createSanitizeBashHook()] }],
-      },
-    }
+    prompt: prompt,
+    options: queryOptions,
   })) {
     messageCount++;
     const msgType = message.type === 'system' ? `system/${(message as { subtype?: string }).subtype}` : message.type;
@@ -495,7 +470,6 @@ async function runQuery(
     }
   }
 
-  ipcPolling = false;
   log(`Query done. Messages: ${messageCount}, results: ${resultCount}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}`);
   return { newSessionId, lastAssistantUuid, closedDuringQuery };
 }

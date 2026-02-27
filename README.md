@@ -54,6 +54,7 @@ Then run `/setup`. Claude Code handles everything: dependencies, authentication,
 
 ## What It Supports
 
+### Core Features
 - **Messenger I/O** - Message NanoClaw from your phone. Supports WhatsApp, Telegram, Discord, Slack, Signal and headless operation.
 - **Isolated group context** - Each group has its own `CLAUDE.md` memory, isolated filesystem, and runs in its own container sandbox with only that filesystem mounted to it.
 - **Main channel** - Your private channel (self-chat) for admin control; every group is completely isolated
@@ -61,8 +62,29 @@ Then run `/setup`. Claude Code handles everything: dependencies, authentication,
 - **Web access** - Search and fetch content from the Web
 - **Container isolation** - Agents are sandboxed in Apple Container (macOS) or Docker (macOS/Linux)
 - **Agent Swarms** - Spin up teams of specialized agents that collaborate on complex tasks. NanoClaw is the first personal AI assistant to support agent swarms.
-- **Anti-hallucination rules** - Built-in verification protocol that requires citations for facts and "I don't know" responses when information isn't found. Reduces AI hallucinations for contact info, schedules, and other factual queries.
-- **Optional integrations** - Add Gmail (`/add-gmail`) and more via skills
+
+### Built-in Intelligence Features
+
+- **Anti-hallucination rules** - Agent verifies facts before answering, cites sources with `Source: filename.md#section` format, and admits "I don't have this information" when unknown. Reduces AI hallucinations for contact info, schedules, and other factual queries.
+
+- **Persistent Memory** - Structured memory system with:
+  - `MEMORY.md` - Long-term curated facts (preferences, contacts, decisions)
+  - `memory/YYYY-MM-DD.md` - Daily session logs (append-only)
+  - `knowledge/` - Structured data files (customers, projects, preferences)
+
+- **Sub-Agent Model Config** - Cost-optimized sub-agents via `agent-config.json`:
+  - `researcher` → Haiku (fast, cheap lookups)
+  - `coder` → Sonnet (code implementation)
+  - `reviewer` → Opus (quality checks)
+  
+- **RAG Integration** - Hybrid search (BM25 + vector) over memory files:
+  - `memory_search` - Semantic search with citations
+  - `memory_get` - Read specific files/sections
+  - `memory_reindex` - Rebuild search index
+  - `memory_stats` - View index statistics
+
+### Optional Integrations
+- Add Gmail (`/add-gmail`) and more via skills
 
 ## Usage
 
@@ -72,6 +94,7 @@ Talk to your assistant with the trigger word (default: `@Andy`):
 @Andy send an overview of the sales pipeline every weekday morning at 9am (has access to my Obsidian vault folder)
 @Andy review the git history for the past week each Friday and update the README if there's drift
 @Andy every Monday at 8am, compile news on AI developments from Hacker News and TechCrunch and message me a briefing
+@Andy search my memory for all customer preferences
 ```
 
 From the main channel (your self-chat), you can manage groups and tasks:
@@ -115,30 +138,83 @@ Skills we'd like to see:
 ## Requirements
 
 - macOS or Linux
-- Node.js 20+
+- [Bun](https://bun.sh) 1.2+ (not Node.js)
 - [Claude Code](https://claude.ai/download)
 - [Apple Container](https://github.com/apple/container) (macOS) or [Docker](https://docker.com/products/docker-desktop) (macOS/Linux)
 
 ## Architecture
 
 ```
-WhatsApp (baileys) --> SQLite --> Polling loop --> Container (Claude Agent SDK) --> Response
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              NANOCLAW ARCHITECTURE                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────────┐     ┌──────────────┐     ┌────────────────────────────┐  │
+│  │  WhatsApp    │     │   SQLite     │     │    Container (Bun)         │  │
+│  │  (baileys)   │────▶│   Database   │────▶│  ┌──────────────────────┐  │  │
+│  └──────────────┘     └──────────────┘     │  │  Agent Runner        │  │  │
+│                                            │  │  (Claude Agent SDK)  │  │  │
+│  ┌──────────────┐     ┌──────────────┐     │  └──────────────────────┘  │  │
+│  │  Telegram    │     │   Message    │     │  ┌──────────────────────┐  │  │
+│  │  (grammy)    │────▶│   Queue      │────▶│  │  RAG Server         │  │  │
+│  └──────────────┘     └──────────────┘     │  │  (MCP: memory_*)    │  │  │
+│                                            │  └──────────────────────┘  │  │
+│  ┌──────────────┐                          │  ┌──────────────────────┐  │  │
+│  │  Other       │                          │  │  MCP Servers        │  │  │
+│  │  Channels    │                          │  │  (zai, web, etc)    │  │  │
+│  └──────────────┘                          │  └──────────────────────┘  │  │
+│                                            └────────────────────────────┘  │
+│                                                                             │
+│  Memory Structure (per-group):                                              │
+│  groups/main/                                                               │
+│  ├── CLAUDE.md           # System prompt                                    │
+│  ├── MEMORY.md           # Long-term facts                                  │
+│  ├── memory/             # Daily logs                                       │
+│  ├── knowledge/          # Structured data                                  │
+│  ├── agent-config.json   # Sub-agent model config                          │
+│  └── conversations/      # Archived sessions                                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Single Node.js process. Agents execute in isolated Linux containers with filesystem isolation. Only mounted directories are accessible. Per-group message queue with concurrency control. IPC via filesystem.
+Single Bun process. Agents execute in isolated Linux containers with filesystem isolation. Only mounted directories are accessible. Per-group message queue with concurrency control. IPC via filesystem.
 
-Key files:
-- `src/index.ts` - Orchestrator: state, message loop, agent invocation
-- `src/channels/whatsapp.ts` - WhatsApp connection, auth, send/receive
-- `src/ipc.ts` - IPC watcher and task processing
-- `src/router.ts` - Message formatting and outbound routing
-- `src/group-queue.ts` - Per-group queue with global concurrency limit
-- `src/container-runner.ts` - Spawns streaming agent containers
-- `src/task-scheduler.ts` - Runs scheduled tasks
-- `src/db.ts` - SQLite operations (messages, groups, sessions, state)
-- `groups/*/CLAUDE.md` - Per-group memory
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/index.ts` | Orchestrator: state, message loop, agent invocation |
+| `src/channels/whatsapp.ts` | WhatsApp connection, auth, send/receive |
+| `src/channels/telegram.ts` | Telegram bot integration |
+| `src/ipc.ts` | IPC watcher and task processing |
+| `src/router.ts` | Message formatting and outbound routing |
+| `src/group-queue.ts` | Per-group queue with global concurrency limit |
+| `src/container-runner.ts` | Spawns streaming agent containers |
+| `src/task-scheduler.ts` | Runs scheduled tasks |
+| `src/db.ts` | SQLite operations (messages, groups, sessions, state) |
+| `container/agent-runner/` | Container-side agent runner (Bun) |
+| `container/rag-server/` | RAG MCP server for memory search |
+| `groups/*/CLAUDE.md` | Per-group system prompt |
+| `groups/*/MEMORY.md` | Per-group long-term memory |
+| `groups/*/agent-config.json` | Sub-agent model configuration |
+
+### Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| Runtime | Bun 1.2+ |
+| Agent SDK | Claude Agent SDK |
+| Database | SQLite (bun:sqlite) |
+| Container | Docker / Apple Container |
+| RAG | BM25 (FTS5) + Vector Search |
+| Embeddings | OpenRouter / OpenAI API |
+| MCP | @modelcontextprotocol/sdk |
 
 ## FAQ
+
+**Why Bun instead of Node.js?**
+
+Bun provides faster startup, native SQLite support via `bun:sqlite`, and built-in TypeScript support. No more `node_modules` headaches with native modules like `better-sqlite3`.
 
 **Why Docker?**
 
@@ -171,6 +247,17 @@ Only security fixes, bug fixes, and clear improvements will be accepted to the b
 Everything else (new capabilities, OS compatibility, hardware support, enhancements) should be contributed as skills.
 
 This keeps the base system minimal and lets every user customize their installation without inheriting features they don't want.
+
+## Environment Variables
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `CLAUDE_CODE_OAUTH_TOKEN` | Yes* | Claude subscription auth |
+| `ANTHROPIC_API_KEY` | Yes* | Direct API key |
+| `Z_AI_API_KEY` | Optional | Z.ai backend (alternative to Claude) |
+| `OPENROUTER_API_KEY` | Optional | RAG embeddings (falls back to Z_AI_API_KEY) |
+
+*One of `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` is required.
 
 ## Community
 

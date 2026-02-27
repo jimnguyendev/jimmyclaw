@@ -55,6 +55,15 @@ RUN bun run build
 WORKDIR /app
 RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input /workspace/project/data/rag
 
+# Create non-root user for security (required by Claude Code CLI)
+RUN useradd -m -s /bin/bash nanoclaw && \
+    chown -R nanoclaw:nanoclaw /app /workspace
+
+# Create /home/node directory for when running with --user flag from host
+# The host user (e.g., UID 501) needs a writable home directory
+RUN mkdir -p /home/node/.claude && \
+    chmod -R 777 /home/node
+
 # Create entrypoint script
 RUN printf '#!/bin/bash\nset -e\ncat > /tmp/input.json\nbun run /app/agent-runner/dist/index.js < /tmp/input.json\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
@@ -63,6 +72,9 @@ RUN chmod -R 777 /workspace
 
 # Set working directory to group workspace
 WORKDIR /workspace/group
+
+# Switch to non-root user
+USER nanoclaw
 
 # Entry point reads JSON from stdin, outputs JSON to stdout
 ENTRYPOINT ["/app/entrypoint.sh"]
