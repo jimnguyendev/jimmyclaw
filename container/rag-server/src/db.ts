@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import fs from 'fs';
 import path from 'path';
-import { Chunk, IndexStats, RAGConfig } from './types.js';
+import { Chunk, IndexStats, RAGConfig, SearchConfig } from './types.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS documents (
@@ -53,6 +53,56 @@ export class RAGDatabase {
 
   private initialize(): void {
     this.db.run(SCHEMA);
+    this.migrateSchema();
+  }
+
+  private migrateSchema(): void {
+    // Add access tracking columns if missing
+    const cols = this.db.query(`PRAGMA table_info(documents)`).all() as { name: string }[];
+    const colNames = new Set(cols.map(c => c.name));
+
+    if (!colNames.has('access_count')) {
+      this.db.run(`ALTER TABLE documents ADD COLUMN access_count INTEGER DEFAULT 0`);
+    }
+    if (!colNames.has('last_accessed')) {
+      this.db.run(`ALTER TABLE documents ADD COLUMN last_accessed TIMESTAMP`);
+    }
+
+    // Persistent embedding cache
+    this.db.run(`CREATE TABLE IF NOT EXISTS embedding_cache (
+      hash TEXT PRIMARY KEY,
+      embedding BLOB NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // Session context tracking
+    this.db.run(`CREATE TABLE IF NOT EXISTS search_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      chunk_id INTEGER NOT NULL,
+      accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_search_sessions_session ON search_sessions(session_id)`);
+
+    // Tunable config
+    this.db.run(`CREATE TABLE IF NOT EXISTS search_config (
+      key TEXT PRIMARY KEY,
+      value REAL NOT NULL
+    )`);
+
+    // Insert defaults if missing
+    const defaults: [string, number][] = [
+      ['bm25_weight', 0.3],
+      ['vector_weight', 0.7],
+      ['decay_half_life', 30],
+      ['decay_access_factor', 0.1],
+      ['mmr_lambda', 0.7],
+      ['session_boost', 0.15],
+    ];
+    const insertConfig = this.db.query(`INSERT OR IGNORE INTO search_config (key, value) VALUES (?, ?)`);
+    for (const [key, value] of defaults) {
+      insertConfig.run(key, value);
+    }
   }
 
   insertChunk(chunk: Omit<Chunk, 'id' | 'createdAt' | 'updatedAt'>): number {
@@ -220,6 +270,92 @@ export class RAGDatabase {
     const stmt = this.db.query(`SELECT path, hash FROM documents GROUP BY path`);
     const rows = stmt.all() as { path: string; hash: string }[];
     return new Map(rows.map(r => [r.path, r.hash]));
+  }
+
+  recordAccess(ids: number[]): void {
+    if (ids.length === 0) return;
+    const placeholders = ids.map(() => '?').join(', ');
+    this.db.run(
+      `UPDATE documents SET access_count = access_count + 1, last_accessed = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`,
+      ...ids
+    );
+  }
+
+  recordSessionAccess(sessionId: string, chunkIds: number[]): void {
+    const stmt = this.db.query(`INSERT INTO search_sessions (session_id, chunk_id) VALUES (?, ?)`);
+    for (const id of chunkIds) {
+      stmt.run(sessionId, id);
+    }
+  }
+
+  getSessionChunkIds(sessionId: string, withinHours: number = 2): Set<number> {
+    const stmt = this.db.query(
+      `SELECT DISTINCT chunk_id FROM search_sessions WHERE session_id = ? AND accessed_at > datetime('now', ?)`,
+    );
+    const rows = stmt.all(sessionId, `-${withinHours} hours`) as { chunk_id: number }[];
+    return new Set(rows.map(r => r.chunk_id));
+  }
+
+  cacheEmbedding(hash: string, embedding: number[]): void {
+    const blob = Buffer.from(new Float32Array(embedding).buffer);
+    this.db.query(`INSERT OR REPLACE INTO embedding_cache (hash, embedding) VALUES (?, ?)`).run(hash, blob);
+  }
+
+  getCachedEmbedding(hash: string): number[] | null {
+    const row = this.db.query(`SELECT embedding FROM embedding_cache WHERE hash = ?`).get(hash) as { embedding: Buffer } | undefined;
+    if (!row?.embedding) return null;
+    return Array.from(new Float32Array(row.embedding.buffer));
+  }
+
+  getSearchConfig(): SearchConfig {
+    const rows = this.db.query(`SELECT key, value FROM search_config`).all() as { key: string; value: number }[];
+    const config: Record<string, number> = {};
+    for (const r of rows) config[r.key] = r.value;
+    return {
+      bm25_weight: config.bm25_weight ?? 0.3,
+      vector_weight: config.vector_weight ?? 0.7,
+      decay_half_life: config.decay_half_life ?? 30,
+      decay_access_factor: config.decay_access_factor ?? 0.1,
+      mmr_lambda: config.mmr_lambda ?? 0.7,
+      session_boost: config.session_boost ?? 0.15,
+    };
+  }
+
+  setSearchConfig(key: string, value: number): void {
+    this.db.query(`INSERT OR REPLACE INTO search_config (key, value) VALUES (?, ?)`).run(key, value);
+  }
+
+  getChunkWithMeta(id: number): (Chunk & { accessCount: number; path: string }) | null {
+    const stmt = this.db.query(`
+      SELECT id, path, chunk_index as chunkIndex, content, line_start as lineStart,
+             line_end as lineEnd, hash, embedding, access_count as accessCount,
+             created_at as createdAt, updated_at as updatedAt
+      FROM documents WHERE id = $id
+    `);
+    const row = stmt.get({ $id: id }) as (Chunk & { accessCount: number; embedding: Buffer | null }) | null;
+    if (!row) return null;
+    if (row.embedding) {
+      (row as any).embedding = Array.from(new Float32Array(row.embedding.buffer));
+    }
+    return row as any;
+  }
+
+  getAllEmbeddings(): { id: number; embedding: number[] }[] {
+    const rows = this.db.query(`SELECT id, embedding FROM documents WHERE embedding IS NOT NULL`).all() as { id: number; embedding: Buffer }[];
+    return rows.map(r => ({
+      id: r.id,
+      embedding: Array.from(new Float32Array(r.embedding.buffer)),
+    }));
+  }
+
+  getEmbeddingCacheSize(): number {
+    const row = this.db.query(`SELECT COUNT(*) as count FROM embedding_cache`).get() as { count: number };
+    return row.count;
+  }
+
+  getAccessStats(): { totalAccesses: number; chunksWithAccess: number } {
+    const row = this.db.query(`SELECT COALESCE(SUM(access_count),0) as total, COUNT(CASE WHEN access_count > 0 THEN 1 END) as withAccess FROM documents`).get() as { total: number; withAccess: number };
+    return { totalAccesses: row.total, chunksWithAccess: row.withAccess };
   }
 
   close(): void {

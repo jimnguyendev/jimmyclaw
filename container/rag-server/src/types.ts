@@ -34,6 +34,17 @@ export interface SearchOptions {
   sources?: ('memory' | 'knowledge' | 'conversations')[];
   bm25Weight?: number;
   vectorWeight?: number;
+  mmrLambda?: number;
+  sessionId?: string;
+}
+
+export interface SearchConfig {
+  bm25_weight: number;
+  vector_weight: number;
+  decay_half_life: number;
+  decay_access_factor: number;
+  mmr_lambda: number;
+  session_boost: number;
 }
 
 export interface RAGConfig {

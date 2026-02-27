@@ -1,24 +1,25 @@
-import { LRUCache } from 'lru-cache';
 import crypto from 'crypto';
+import { RAGDatabase } from './db.js';
 
 const EMBEDDING_MODEL = 'openai/text-embedding-3-small';
 const EMBEDDING_DIMENSION = 1536;
 const MAX_INPUT_LENGTH = 8000;
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/embeddings';
+const L1_CACHE_MAX = 50;
 
 export class EmbeddingClient {
   private apiKey: string | undefined;
-  private cache: LRUCache<string, number[]>;
   private enabled: boolean;
+  private l1Cache: Map<string, number[]> = new Map();
+  private db: RAGDatabase | null = null;
 
   constructor() {
-    // Support both OPENROUTER_API_KEY and Z_AI_API_KEY
     this.apiKey = process.env.OPENROUTER_API_KEY || process.env.Z_AI_API_KEY;
     this.enabled = !!this.apiKey;
-    this.cache = new LRUCache<string, number[]>({
-      max: 500,
-      ttl: 1000 * 60 * 60,
-    });
+  }
+
+  setDatabase(db: RAGDatabase): void {
+    this.db = db;
   }
 
   isEnabled(): boolean {
@@ -33,8 +34,18 @@ export class EmbeddingClient {
     const truncated = text.slice(0, MAX_INPUT_LENGTH);
     const cacheKey = this.hashText(truncated);
 
-    const cached = this.cache.get(cacheKey);
-    if (cached) return cached;
+    // L1 hot cache
+    const l1 = this.l1Cache.get(cacheKey);
+    if (l1) return l1;
+
+    // L2 DB cache
+    if (this.db) {
+      const cached = this.db.getCachedEmbedding(cacheKey);
+      if (cached) {
+        this.setL1(cacheKey, cached);
+        return cached;
+      }
+    }
 
     if (!this.enabled || !this.apiKey) {
       return this.dummyEmbedding();
@@ -43,7 +54,8 @@ export class EmbeddingClient {
     try {
       const embedding = await this.callOpenRouterAPI([truncated]);
       if (embedding && embedding.length > 0) {
-        this.cache.set(cacheKey, embedding[0]);
+        this.setL1(cacheKey, embedding[0]);
+        this.db?.cacheEmbedding(cacheKey, embedding[0]);
         return embedding[0];
       }
       return this.dummyEmbedding();
@@ -64,23 +76,28 @@ export class EmbeddingClient {
     for (let i = 0; i < texts.length; i++) {
       const truncated = texts[i].slice(0, MAX_INPUT_LENGTH);
       const key = this.hashText(truncated);
-      const cached = this.cache.get(key);
-      
-      if (cached) {
-        results[i] = cached;
-      } else {
-        uncached.push({ index: i, text: truncated, key });
+
+      // Check L1
+      const l1 = this.l1Cache.get(key);
+      if (l1) { results[i] = l1; continue; }
+
+      // Check L2
+      if (this.db) {
+        const cached = this.db.getCachedEmbedding(key);
+        if (cached) { this.setL1(key, cached); results[i] = cached; continue; }
       }
+
+      uncached.push({ index: i, text: truncated, key });
     }
 
     if (uncached.length > 0) {
       try {
         const embeddings = await this.callOpenRouterAPI(uncached.map(u => u.text));
-        
         for (let i = 0; i < uncached.length; i++) {
           if (embeddings[i]) {
             results[uncached[i].index] = embeddings[i];
-            this.cache.set(uncached[i].key, embeddings[i]);
+            this.setL1(uncached[i].key, embeddings[i]);
+            this.db?.cacheEmbedding(uncached[i].key, embeddings[i]);
           } else {
             results[uncached[i].index] = this.dummyEmbedding();
           }
@@ -94,6 +111,15 @@ export class EmbeddingClient {
     }
 
     return results;
+  }
+
+  private setL1(key: string, value: number[]): void {
+    if (this.l1Cache.size >= L1_CACHE_MAX) {
+      // Evict oldest entry
+      const firstKey = this.l1Cache.keys().next().value!;
+      this.l1Cache.delete(firstKey);
+    }
+    this.l1Cache.set(key, value);
   }
 
   private async callOpenRouterAPI(texts: string[]): Promise<number[][]> {
@@ -125,7 +151,7 @@ export class EmbeddingClient {
       .map(d => d.embedding);
   }
 
-  private hashText(text: string): string {
+  hashText(text: string): string {
     return crypto.createHash('sha256').update(text).digest('hex');
   }
 

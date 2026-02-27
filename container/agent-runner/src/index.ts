@@ -19,6 +19,7 @@ import path from 'path';
 import { query, HookCallback, PreCompactHookInput, PreToolUseHookInput } from '@anthropic-ai/claude-agent-sdk';
 import { fileURLToPath } from 'url';
 import { loadAgentConfig, buildAgentsOption } from './agent-config.js';
+import { extractFromTranscript } from './extractor.js';
 
 interface ContainerInput {
   prompt: string;
@@ -178,6 +179,17 @@ function createPreCompactHook(assistantName?: string): HookCallback {
       fs.writeFileSync(filePath, markdown);
 
       log(`Archived conversation to ${filePath}`);
+
+      // Extract structured knowledge from transcript
+      try {
+        const counts = extractFromTranscript(markdown, filePath);
+        const total = counts.decisions + counts.preferences + counts.tasks;
+        if (total > 0) {
+          log(`Extracted: ${counts.decisions} decisions, ${counts.preferences} preferences, ${counts.tasks} tasks`);
+        }
+      } catch (extractErr) {
+        log(`Extraction failed: ${extractErr instanceof Error ? extractErr.message : String(extractErr)}`);
+      }
     } catch (err) {
       log(`Failed to archive transcript: ${err instanceof Error ? err.message : String(err)}`);
     }

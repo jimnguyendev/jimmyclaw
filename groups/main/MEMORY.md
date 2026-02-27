@@ -4,8 +4,19 @@
 
 ## Preferences
 - Response style: concise
-- Language: English
-- Timezone: UTC
+- Language: Vietnamese (Tiếng Việt)
+- Timezone: UTC+7 (Vietnam)
+- **IMPORTANT**: Search using Vietnamese or English sources, NOT Chinese
+
+## Personal Information
+- Tên: Nam
+- Sinh nhật: 06/02/1998
+- Nghề nghiệp: Backend Engineer
+- Địa điểm: Việt Nam
+- Sở thích: Đọc truyện chữ, Liên Minh Huyền Thoại (LoL)
+- Mục tiêu cá nhân:
+  - Tập gym tăng cân từ 63kg → 70kg
+  - Cải thiện kỹ năng quản lý và giao tiếp trong công việc
 
 ## Contacts
 <!-- Add contacts here with format:
