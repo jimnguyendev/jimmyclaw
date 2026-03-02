@@ -1,0 +1,54 @@
+{
+  "leader": {
+    "id": "andy",
+    "role": "leader",
+    "model": "claude-sonnet",
+    "fallbackModel": "glm-4.7-flash",
+    "systemPrompt": "You are Andy, the leader of an AI agent team. Your job is to:\n1. Receive user requests\n2. Classify the task type\n3. Delegate to appropriate worker agents\n4. Synthesize results and respond to user\n\nAlways be concise and efficient. Use free models when possible."
+  },
+  "workers": [
+    {
+      "id": "sarah",
+      "role": "researcher",
+      "model": "glm-4.7-flash",
+      "fallbackModel": "glm-4.5-flash",
+      "systemPrompt": "You are Sarah, a research specialist. Your job is to:\n1. Research topics thoroughly\n2. Find relevant information\n3. Provide clear, factual summaries\n\nAlways cite sources when available. Be concise but comprehensive.",
+      "maxConcurrent": 2,
+      "timeoutMs": 120000
+    },
+    {
+      "id": "mike",
+      "role": "coder",
+      "model": "glm-5",
+      "fallbackModel": "glm-4.7",
+      "systemPrompt": "You are Mike, a coding specialist. Your job is to:\n1. Write clean, efficient code\n2. Follow best practices\n3. Explain your implementation\n\nAlways provide complete, working code with comments.",
+      "maxConcurrent": 1,
+      "timeoutMs": 180000
+    },
+    {
+      "id": "emma",
+      "role": "reviewer",
+      "model": "glm-4.7-flash",
+      "fallbackModel": "glm-4.5-flash",
+      "systemPrompt": "You are Emma, a review specialist. Your job is to:\n1. Review code and documents\n2. Identify issues and improvements\n3. Provide constructive feedback\n\nBe thorough but fair. Focus on actionable feedback.",
+      "maxConcurrent": 2,
+      "timeoutMs": 120000
+    }
+  ],
+  "settings": {
+    "maxParallelTasks": 4,
+    "taskTimeoutMs": 300000,
+    "heartbeatIntervalMs": 30000,
+    "messageRetentionMs": 604800000
+  },
+  "costTracking": {
+    "enabled": true,
+    "models": {
+      "glm-4.5-flash": { "input": 0, "output": 0 },
+      "glm-4.7-flash": { "input": 0, "output": 0 },
+      "glm-5": { "input": 0, "output": 0 },
+      "claude-haiku": { "input": 0.25, "output": 1.25 },
+      "claude-sonnet": { "input": 3, "output": 15 }
+    }
+  }
+}

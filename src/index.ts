@@ -3,16 +3,18 @@ import path from 'path';
 
 import {
   ASSISTANT_NAME,
+  DISCORD_BOT_TOKEN,
   IDLE_TIMEOUT,
   MAIN_GROUP_FOLDER,
   POLL_INTERVAL,
+  SWARM_ENABLED,
   TELEGRAM_BOT_POOL,
   TELEGRAM_BOT_TOKEN,
   TELEGRAM_ONLY,
   TRIGGER_PATTERN,
 } from './config.js';
 import { TelegramChannel, initBotPool } from './channels/telegram.js';
-import { WhatsAppChannel } from './channels/whatsapp.js';
+import { DiscordChannel } from './channels/discord.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -27,6 +29,7 @@ import {
   getAllTasks,
   getMessagesSince,
   getNewMessages,
+  getRawDb,
   getRouterState,
   initDatabase,
   setRegisteredGroup,
@@ -42,6 +45,8 @@ import { findChannel, formatMessages, formatOutbound } from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
+import { initSwarmMode, getOrchestrator, isSwarmEnabled, shutdownSwarm, runSwarmAgent } from './swarm.js';
+import { createSwarmCommandHandler, isSwarmCommand } from './swarm-commands.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -52,8 +57,7 @@ let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
 
-let whatsapp: WhatsAppChannel;
-const channels: Channel[] = [];
+let channels: Channel[] = [];
 const queue = new GroupQueue();
 
 function loadState(): void {
@@ -148,13 +152,53 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
   const prompt = formatMessages(missedMessages);
 
+  // Check for swarm commands first
+  if (isSwarmEnabled() && isSwarmCommand(prompt)) {
+    const commandHandler = createSwarmCommandHandler(getRawDb(), getOrchestrator());
+    const result = await commandHandler.handleSwarmCommand(prompt);
+
+    if (result.handled) {
+      if (result.response) {
+        await channel.sendMessage(chatJid, result.response);
+      } else if (result.error) {
+        await channel.sendMessage(chatJid, `❌ Error: ${result.error}`);
+      }
+      lastAgentTimestamp[chatJid] = missedMessages[missedMessages.length - 1].timestamp;
+      saveState();
+      return true;
+    }
+  }
+
+  // Route to swarm agent if enabled (not a command)
+  if (isSwarmEnabled()) {
+    logger.info({ group: group.name }, 'Routing to swarm agent');
+    
+    try {
+      const swarmResult = await runSwarmAgent(group, prompt, chatJid);
+      
+      if (swarmResult.status === 'success' && swarmResult.result) {
+        await channel.sendMessage(chatJid, swarmResult.result);
+      } else if (swarmResult.error) {
+        await channel.sendMessage(chatJid, `❌ ${swarmResult.error}`);
+      }
+      
+      lastAgentTimestamp[chatJid] = missedMessages[missedMessages.length - 1].timestamp;
+      saveState();
+      return true;
+    } catch (error) {
+      logger.error({ group: group.name, error }, 'Swarm agent error');
+      await channel.sendMessage(chatJid, `❌ Swarm error: ${error instanceof Error ? error.message : 'Unknown'}`);
+      lastAgentTimestamp[chatJid] = missedMessages[missedMessages.length - 1].timestamp;
+      saveState();
+      return false;
+    }
+  }
+
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
   // these messages. Save the old cursor so we can roll back on error.
   const previousCursor = lastAgentTimestamp[chatJid] || '';
   lastAgentTimestamp[chatJid] = missedMessages[missedMessages.length - 1].timestamp;
   saveState();
-
-  logger.info({ group: group.name, messageCount: missedMessages.length }, 'Processing messages');
 
   // Track idle timer for closing stdin when agent is idle
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -411,9 +455,18 @@ async function main(): Promise<void> {
   logger.info('Database initialized');
   loadState();
 
+  // Initialize swarm mode if enabled
+  if (SWARM_ENABLED) {
+    initSwarmMode();
+    logger.info('Swarm mode enabled');
+  }
+
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
+    if (isSwarmEnabled()) {
+      shutdownSwarm();
+    }
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();
     process.exit(0);
@@ -444,10 +497,10 @@ async function main(): Promise<void> {
     }
   }
 
-  if (!TELEGRAM_ONLY) {
-    whatsapp = new WhatsAppChannel(channelOpts);
-    channels.push(whatsapp);
-    await whatsapp.connect();
+  if (DISCORD_BOT_TOKEN) {
+    const discord = new DiscordChannel(DISCORD_BOT_TOKEN, channelOpts);
+    channels.push(discord);
+    await discord.connect();
   }
 
   // Start subsystems (independently of connection handler)
@@ -475,7 +528,7 @@ async function main(): Promise<void> {
     },
     registeredGroups: () => registeredGroups,
     registerGroup,
-    syncGroupMetadata: (force) => whatsapp?.syncGroupMetadata(force) ?? Promise.resolve(),
+    syncGroupMetadata: async () => {},
     getAvailableGroups,
     writeGroupsSnapshot: (gf, im, ag, rj) => writeGroupsSnapshot(gf, im, ag, rj),
   });

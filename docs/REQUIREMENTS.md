@@ -71,25 +71,25 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 **Core components:**
 - **Claude Agent SDK** as the core agent
 - **Containers** for isolated agent execution (Linux VMs)
-- **WhatsApp** as the primary I/O channel
+- **Telegram/Discord** as primary I/O channels
 - **Persistent memory** per conversation and globally
 - **Scheduled tasks** that run Claude and can message back
 - **Web access** for search and browsing
 - **Browser automation** via agent-browser
 
 **Implementation approach:**
-- Use existing tools (WhatsApp connector, Claude Agent SDK, MCP servers)
+- Use existing tools (Telegram/Discord connector, Claude Agent SDK, MCP servers)
 - Minimal glue code
 - File-based systems where possible (CLAUDE.md for memory, folders for groups)
 
 ---
 
-## Architecture Decisions
+## Architecture
 
 ### Message Routing
-- A router listens to WhatsApp and routes messages based on configuration
+- A router listens to Telegram/Discord and routes messages based on configuration
 - Only messages from registered groups are processed
-- Trigger: `@Andy` prefix (case insensitive), configurable via `ASSISTANT_NAME` env var
+- Trigger: `@Andy` prefix (case insensitive, configurable via `ASSISTANT_NAME` env var)
 - Unregistered groups are ignored completely
 
 ### Memory System

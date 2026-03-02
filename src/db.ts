@@ -81,6 +81,69 @@ function createSchema(database: Database): void {
       container_config TEXT,
       requires_trigger INTEGER DEFAULT 1
     );
+
+    CREATE TABLE IF NOT EXISTS swarm_agents (
+      id TEXT PRIMARY KEY,
+      role TEXT NOT NULL,
+      model TEXT NOT NULL,
+      fallback_model TEXT,
+      status TEXT DEFAULT 'idle',
+      current_task_id TEXT,
+      last_heartbeat TEXT,
+      total_tasks INTEGER DEFAULT 0,
+      success_count INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_swarm_agents_status ON swarm_agents(status);
+
+    CREATE TABLE IF NOT EXISTS swarm_tasks (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      priority INTEGER DEFAULT 0,
+      prompt TEXT NOT NULL,
+      context TEXT,
+      from_agent TEXT NOT NULL,
+      to_agent TEXT,
+      parent_task_id TEXT,
+      status TEXT DEFAULT 'pending',
+      result TEXT,
+      error TEXT,
+      tokens_used INTEGER,
+      cost INTEGER,
+      created_at TEXT NOT NULL,
+      started_at TEXT,
+      completed_at TEXT,
+      timeout_ms INTEGER DEFAULT 300000,
+      retries INTEGER DEFAULT 0,
+      max_retries INTEGER DEFAULT 3,
+      user_id TEXT,
+      chat_jid TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_swarm_tasks_status ON swarm_tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_swarm_tasks_to_agent ON swarm_tasks(to_agent, status);
+    CREATE INDEX IF NOT EXISTS idx_swarm_tasks_created ON swarm_tasks(created_at);
+
+    CREATE TABLE IF NOT EXISTS swarm_messages (
+      id TEXT PRIMARY KEY,
+      from_agent TEXT NOT NULL,
+      to_agent TEXT,
+      type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      task_id TEXT,
+      read_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_swarm_messages_to ON swarm_messages(to_agent, read_at);
+    CREATE INDEX IF NOT EXISTS idx_swarm_messages_created ON swarm_messages(created_at);
+
+    CREATE TABLE IF NOT EXISTS swarm_memory (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      type TEXT DEFAULT 'string',
+      updated_by TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      expires_at TEXT
+    );
   `);
 
   // Migrations for existing DBs
@@ -92,7 +155,7 @@ function createSchema(database: Database): void {
 
   try {
     database.exec(`ALTER TABLE messages ADD COLUMN is_bot_message INTEGER DEFAULT 0`);
-    database.run(
+    (database.run as (sql: string, ...bindings: unknown[]) => void)(
       `UPDATE messages SET is_bot_message = 1 WHERE content LIKE ?`,
       `${ASSISTANT_NAME}:%`,
     );
@@ -103,12 +166,8 @@ function createSchema(database: Database): void {
   try {
     database.exec(`ALTER TABLE chats ADD COLUMN channel TEXT`);
     database.exec(`ALTER TABLE chats ADD COLUMN is_group INTEGER DEFAULT 0`);
-    database.exec(`UPDATE chats SET channel = 'whatsapp', is_group = 1 WHERE jid LIKE '%@g.us'`);
-    database.exec(
-      `UPDATE chats SET channel = 'whatsapp', is_group = 0 WHERE jid LIKE '%@s.whatsapp.net'`,
-    );
-    database.exec(`UPDATE chats SET channel = 'discord', is_group = 1 WHERE jid LIKE 'dc:%'`);
     database.exec(`UPDATE chats SET channel = 'telegram', is_group = 1 WHERE jid LIKE 'tg:%'`);
+    database.exec(`UPDATE chats SET channel = 'discord', is_group = 1 WHERE jid LIKE 'dc:%'`);
   } catch {
     /* columns already exist */
   }
@@ -133,6 +192,16 @@ export function _initTestDatabase(): void {
   db = drizzle(rawDb, { schema });
 }
 
+/** Get the raw SQLite database instance (for swarm mode). */
+export function getRawDatabase(): Database {
+  return rawDb;
+}
+
+/** Get the raw SQLite database instance for advanced usage. */
+export function getRawDb(): Database {
+  return rawDb;
+}
+
 /**
  * Store chat metadata only (no message content).
  */
@@ -147,7 +216,7 @@ export function storeChatMetadata(
   const group = isGroup === undefined ? null : isGroup ? 1 : 0;
 
   if (name) {
-    rawDb.run(
+    (rawDb.run as (sql: string, ...bindings: unknown[]) => void)(
       `INSERT INTO chats (jid, name, last_message_time, channel, is_group) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(jid) DO UPDATE SET
         name = excluded.name,
@@ -161,7 +230,7 @@ export function storeChatMetadata(
       group,
     );
   } else {
-    rawDb.run(
+    (rawDb.run as (sql: string, ...bindings: unknown[]) => void)(
       `INSERT INTO chats (jid, name, last_message_time, channel, is_group) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(jid) DO UPDATE SET
         last_message_time = MAX(last_message_time, excluded.last_message_time),
@@ -180,7 +249,7 @@ export function storeChatMetadata(
  * Update chat name without changing timestamp for existing chats.
  */
 export function updateChatName(chatJid: string, name: string): void {
-  rawDb.run(
+  (rawDb.run as (sql: string, ...bindings: unknown[]) => void)(
     `INSERT INTO chats (jid, name, last_message_time) VALUES (?, ?, ?)
     ON CONFLICT(jid) DO UPDATE SET name = excluded.name`,
     chatJid,
@@ -231,7 +300,7 @@ export function getLastGroupSync(): string | null {
  */
 export function setLastGroupSync(): void {
   const now = new Date().toISOString();
-  rawDb.run(
+  (rawDb.run as (sql: string, ...bindings: unknown[]) => void)(
     `INSERT OR REPLACE INTO chats (jid, name, last_message_time) VALUES ('__group_sync__', '__group_sync__', ?)`,
     now,
   );
@@ -241,7 +310,7 @@ export function setLastGroupSync(): void {
  * Store a message with full content.
  */
 export function storeMessage(msg: NewMessage): void {
-  rawDb.run(
+  (rawDb.run as (sql: string, ...bindings: unknown[]) => void)(
     `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     msg.id,
     msg.chat_jid,
@@ -255,7 +324,7 @@ export function storeMessage(msg: NewMessage): void {
 }
 
 /**
- * Store a message directly (for non-WhatsApp channels).
+ * Store a message directly (for non-Telegram channels).
  */
 export function storeMessageDirect(msg: {
   id: string;
@@ -267,7 +336,7 @@ export function storeMessageDirect(msg: {
   is_from_me: boolean;
   is_bot_message?: boolean;
 }): void {
-  rawDb.run(
+  (rawDb.run as (sql: string, ...bindings: unknown[]) => void)(
     `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     msg.id,
     msg.chat_jid,
@@ -399,7 +468,7 @@ export function updateTask(
   if (fields.length === 0) return;
 
   values.push(id);
-  rawDb.run(`UPDATE scheduled_tasks SET ${fields.join(', ')} WHERE id = ?`, ...values);
+  (rawDb.run as (sql: string, ...bindings: unknown[]) => void)(`UPDATE scheduled_tasks SET ${fields.join(', ')} WHERE id = ?`, ...values);
 }
 
 export function deleteTask(id: string): void {
@@ -425,7 +494,7 @@ export function getDueTasks(): ScheduledTask[] {
 
 export function updateTaskAfterRun(id: string, nextRun: string | null, lastResult: string): void {
   const now = new Date().toISOString();
-  rawDb.run(
+  (rawDb.run as (sql: string, ...bindings: unknown[]) => void)(
     `UPDATE scheduled_tasks
     SET next_run = ?, last_run = ?, last_result = ?, status = CASE WHEN ? IS NULL THEN 'completed' ELSE status END
     WHERE id = ?`,
@@ -462,7 +531,7 @@ export function getRouterState(key: string): string | undefined {
 }
 
 export function setRouterState(key: string, value: string): void {
-  rawDb.run(`INSERT OR REPLACE INTO router_state (key, value) VALUES (?, ?)`, key, value);
+  (rawDb.run as (sql: string, ...bindings: unknown[]) => void)(`INSERT OR REPLACE INTO router_state (key, value) VALUES (?, ?)`, key, value);
 }
 
 // --- Session accessors ---
@@ -477,7 +546,7 @@ export function getSession(groupFolder: string): string | undefined {
 }
 
 export function setSession(groupFolder: string, sessionId: string): void {
-  rawDb.run(
+  (rawDb.run as (sql: string, ...bindings: unknown[]) => void)(
     `INSERT OR REPLACE INTO sessions (group_folder, session_id) VALUES (?, ?)`,
     groupFolder,
     sessionId,
@@ -524,7 +593,7 @@ export function setRegisteredGroup(jid: string, group: RegisteredGroup): void {
   if (!isValidGroupFolder(group.folder)) {
     throw new Error(`Invalid group folder "${group.folder}" for JID ${jid}`);
   }
-  rawDb.run(
+  (rawDb.run as (sql: string, ...bindings: unknown[]) => void)(
     `INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     jid,

@@ -11,6 +11,7 @@ const envConfig = readEnvFile([
   'ASSISTANT_HAS_OWN_NUMBER',
   'TELEGRAM_BOT_TOKEN',
   'TELEGRAM_ONLY',
+  'DISCORD_BOT_TOKEN',
 ]);
 
 export const ASSISTANT_NAME = process.env.ASSISTANT_NAME || envConfig.ASSISTANT_NAME || 'Andy';
@@ -66,3 +67,10 @@ export const TELEGRAM_BOT_POOL = (process.env.TELEGRAM_BOT_POOL || '')
   .split(',')
   .map((t) => t.trim())
   .filter(Boolean);
+
+export const SWARM_ENABLED = process.env.SWARM_ENABLED === 'true';
+export const SWARM_MAX_PARALLEL_TASKS = parseInt(process.env.SWARM_MAX_PARALLEL_TASKS || '4', 10);
+export const SWARM_TASK_TIMEOUT_MS = parseInt(process.env.SWARM_TASK_TIMEOUT_MS || '300000', 10);
+
+export const DISCORD_BOT_TOKEN =
+  process.env.DISCORD_BOT_TOKEN || envConfig.DISCORD_BOT_TOKEN || '';
