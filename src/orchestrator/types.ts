@@ -1,5 +1,29 @@
-export type AgentRole = 'leader' | 'researcher' | 'coder' | 'reviewer' | 'writer';
-export type TaskType = 'research' | 'code' | 'review' | 'write' | 'general';
+export type AgentRole = string;
+
+export const KNOWN_ROLES: readonly AgentRole[] = ['leader', 'researcher', 'coder', 'reviewer', 'writer'] as const;
+
+export interface RoleDefinition {
+  id: string;
+  description: string;
+  defaultPrompt: string;
+  canDelegate: boolean;
+  keywords: string[];
+}
+
+export interface SubTask {
+  id: string;
+  role: AgentRole;
+  description: string;
+  deps: string[];
+  expectedOutput: string;
+}
+
+export interface TaskPlan {
+  taskId: string;
+  goal: string;
+  subtasks: SubTask[];
+}
+export type TaskType = 'research' | 'code' | 'review' | 'write' | 'general' | 'done' | 'failed' | 'assign' | 'ask' | 'answer' | 'status' | 'plan' | 'artifact';
 export type TaskStatus = 'pending' | 'assigned' | 'processing' | 'done' | 'failed' | 'timeout';
 export type AgentStatus = 'idle' | 'busy' | 'offline' | 'spawning';
 export type MessageType = 'task_assign' | 'task_result' | 'task_failed' | 'query' | 'reply' | 'broadcast' | 'heartbeat';
@@ -114,6 +138,14 @@ export const TASK_KEYWORDS: Record<TaskType, string[]> = {
   review: ['review', 'check', 'kiểm tra', 'verify', 'xác minh', 'audit', 'inspect', 'đánh giá', 'improve', 'cải thiện', 'bug'],
   write: ['write', 'viết', 'document', 'tài liệu', 'doc', 'readme', 'hướng dẫn', 'guide', 'blog', 'article'],
   general: [],
+  done: [],
+  failed: [],
+  assign: [],
+  ask: [],
+  answer: [],
+  status: [],
+  plan: [],
+  artifact: [],
 };
 
 export const DEFAULT_AGENT_CONFIGS: Record<AgentRole, Omit<AgentConfig, 'id'>> = {

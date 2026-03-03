@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { DATA_DIR } from './config.js';
-import { AgentConfig, AgentRole, OrchestratorConfig, TeamChannelConfig, InstanceConfig, DEFAULT_AGENT_CONFIGS } from './orchestrator/types.js';
+import { AgentConfig, AgentRole, OrchestratorConfig, TeamChannelConfig, InstanceConfig, DEFAULT_AGENT_CONFIGS, RoleDefinition } from './orchestrator/types.js';
 import { logger } from './logger.js';
 
 export interface SwarmConfigFile {
@@ -10,6 +10,7 @@ export interface SwarmConfigFile {
   workers: AgentConfig[];
   teamChannel?: TeamChannelConfig;
   instance?: InstanceConfig;
+  roles?: RoleDefinition[];
   settings: {
     maxParallelTasks: number;
     taskTimeoutMs: number;
@@ -217,6 +218,53 @@ export function updateSettings(settings: Partial<SwarmConfigFile['settings']>): 
 
 export function getAvailableRoles(): AgentRole[] {
   return ['leader', 'researcher', 'coder', 'reviewer', 'writer'];
+}
+
+export function getRoles(): RoleDefinition[] {
+  const config = loadSwarmConfig();
+  if (config.roles && config.roles.length > 0) {
+    return config.roles;
+  }
+  
+  const defaultRoles: RoleDefinition[] = [
+    {
+      id: 'leader',
+      description: 'Orchestrates team, breaks down complex tasks, synthesizes results',
+      defaultPrompt: 'You are the team lead. Break complex tasks into subtasks, delegate to appropriate agents, and synthesize results into a cohesive response.',
+      canDelegate: true,
+      keywords: ['organize', 'plan', 'coordinate', 'delegate', 'synthesize', 'tổ chức', 'lập kế hoạch', 'phối hợp', 'ủy quyền', 'tổng hợp'],
+    },
+    {
+      id: 'researcher',
+      description: 'Finds information, analyzes data, summarizes findings',
+      defaultPrompt: 'You are a researcher. Find accurate information, analyze data, and provide clear, factual summaries with sources when available.',
+      canDelegate: false,
+      keywords: ['research', 'find', 'search', 'analyze', 'lookup', 'investigate', 'tìm hiểu', 'tìm kiếm', 'phân tích', 'tra cứu', 'nghiên cứu', 'điều tra'],
+    },
+    {
+      id: 'coder',
+      description: 'Writes code, debugs issues, implements features',
+      defaultPrompt: 'You are a coder. Write clean, efficient code following best practices. Explain your implementation briefly and provide complete, working code.',
+      canDelegate: false,
+      keywords: ['code', 'implement', 'build', 'program', 'function', 'script', 'viết code', 'lập trình', 'xây dựng'],
+    },
+    {
+      id: 'reviewer',
+      description: 'Reviews code, checks quality, identifies issues',
+      defaultPrompt: 'You are a reviewer. Review code and documents thoroughly, identify issues and improvements, and provide constructive, actionable feedback.',
+      canDelegate: false,
+      keywords: ['review', 'check', 'verify', 'audit', 'inspect', 'quality', 'kiểm tra', 'xác minh', 'đánh giá', 'improve', 'cải thiện', 'bug'],
+    },
+    {
+      id: 'writer',
+      description: 'Writes documentation, creates guides, drafts content',
+      defaultPrompt: 'You are a writer. Create clear, well-structured documentation, guides, and content. Use simple language and organize with headers and examples.',
+      canDelegate: false,
+      keywords: ['write', 'document', 'guide', 'readme', 'draft', 'article', 'viết', 'tài liệu', 'doc', 'hướng dẫn', 'guide', 'blog'],
+    },
+  ];
+  
+  return defaultRoles;
 }
 
 export function getAvailableModels(): string[] {

@@ -2,7 +2,7 @@ import { Client, GatewayIntentBits, Events, Message, TextChannel } from 'discord
 import { Api, Bot, Context, GrammyError } from 'grammy';
 import { logger } from '../logger.js';
 
-export type ChannelTaskType = 'research' | 'code' | 'review' | 'done' | 'failed' | 'ask' | 'file' | 'info' | 'broadcast';
+export type ChannelTaskType = 'research' | 'code' | 'review' | 'done' | 'failed' | 'ask' | 'file' | 'info' | 'broadcast' | 'plan' | 'assign' | 'answer' | 'status' | 'artifact';
 
 interface ParsedChannelMessageBase {
   rawText: string;
@@ -13,6 +13,7 @@ interface ParsedChannelMessageBase {
   platform: 'discord' | 'telegram';
   channelMessageId: string;
   timestamp: string;
+  nanoclawPayload?: Record<string, any>;
 }
 
 export type ParsedChannelMessage =
@@ -31,6 +32,7 @@ export interface ChannelMessengerConfig {
 
 export interface ChannelMessenger {
   sendAsAgent(agentId: string, text: string): Promise<void>;
+  sendTypingIndicator?(agentId: string): Promise<void>;
   startListening(handler: (msg: ParsedChannelMessage) => void): void;
   stopListening(): void;
   waitForReply(params: {
@@ -56,9 +58,9 @@ export function parseChannelMessage(
     mentions.push(match[1].toLowerCase());
   }
 
-  const taskTypeRegex = /\[(\w+)\]/;
-  const typeMatch = taskTypeRegex.exec(text);
-  const taskType = typeMatch ? (typeMatch[1].toLowerCase() as ChannelTaskType) : undefined;
+  const nanoclawTypeRegex = /\[nanoclaw:(\w+)\]/;
+  const nanoclawTypeMatch = nanoclawTypeRegex.exec(text);
+  const taskType = nanoclawTypeMatch ? (nanoclawTypeMatch[1].toLowerCase() as ChannelTaskType) : undefined;
 
   const taskIdRegex = /#([a-zA-Z0-9-]+)/;
   const taskIdMatch = taskIdRegex.exec(text);
@@ -66,7 +68,20 @@ export function parseChannelMessage(
 
   let content = text;
   content = content.replace(mentionRegex, '').trim();
-  content = content.replace(taskTypeRegex, '').trim();
+  let nanoclawPayload: Record<string, any> | undefined;
+  if (nanoclawTypeMatch) {
+    content = content.replace(nanoclawTypeRegex, '').trim();
+    const jsonMatch = content.match(/^\{.*?\}/s);
+    if (jsonMatch) {
+      try {
+        nanoclawPayload = JSON.parse(jsonMatch[0]);
+      } catch (e) {
+        logger.warn({ text: jsonMatch[0], error: e }, 'Failed to parse nanoclaw JSON payload');
+      }
+      content = content.replace(jsonMatch[0], '').trim();
+    }
+  }
+  content = content.replace(/\[(\w+)\]/, '').trim();
   content = content.replace(taskIdRegex, '').trim();
 
   const base: ParsedChannelMessageBase = {
@@ -78,6 +93,7 @@ export function parseChannelMessage(
     platform,
     channelMessageId: messageId,
     timestamp: new Date().toISOString(),
+    nanoclawPayload,
   };
 
   if (fromBot && botUsername) {
@@ -365,11 +381,11 @@ export class TelegramChannelMessenger implements ChannelMessenger {
       logger.error({ agentId }, 'Agent API not found');
       throw new Error(`Agent ${agentId} API not found`);
     }
-
+ 
     try {
       const chatId = this.config.channelId;
       const MAX_LENGTH = 4096;
-      
+       
       if (text.length <= MAX_LENGTH) {
         await api.sendMessage(chatId, text);
       } else {
@@ -378,11 +394,26 @@ export class TelegramChannelMessenger implements ChannelMessenger {
           await api.sendMessage(chatId, chunk);
         }
       }
-
+ 
       logger.info({ agentId, chatId: this.config.channelId, length: text.length }, 'Agent message sent via Telegram');
     } catch (err) {
       logger.error({ agentId, err }, 'Failed to send Telegram agent message');
       throw err;
+    }
+  }
+
+  async sendTypingIndicator(agentId: string): Promise<void> {
+    const api = this.agentApis.get(agentId);
+    if (!api) {
+      logger.debug({ agentId }, 'Agent API not found, skipping typing indicator');
+      return;
+    }
+
+    try {
+      await api.sendChatAction(this.config.channelId, 'typing');
+      logger.debug({ agentId }, 'Typing indicator sent via Telegram');
+    } catch (err) {
+      logger.debug({ agentId, err }, 'Failed to send typing indicator');
     }
   }
 

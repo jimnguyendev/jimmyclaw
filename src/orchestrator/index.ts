@@ -3,6 +3,11 @@ import { TaskQueue } from './task-queue.js';
 import { AgentRegistry } from './agent-registry.js';
 import { Messenger } from './messenger.js';
 import { SharedMemory } from './memory.js';
+import { AgentRoleRegistry } from './role-registry.js';
+import { TaskPlanner } from './task-planner.js';
+import { TaskContextStore } from './task-context-store.js';
+import { ProgressReporter } from './progress-reporter.js';
+import { ClarificationHandler } from './clarification-handler.js';
 import { LLMProviderService, llmProvider } from './llm-provider.js';
 import { DEFAULT_FREE_MODEL } from './llm-types.js';
 import {
@@ -23,6 +28,7 @@ import {
   ChannelMessengerConfig,
 } from './channel-messenger.js';
 import { logger } from '../logger.js';
+import { getRoles } from '../swarm-config.js';
 
 const DEFAULT_CONFIG: OrchestratorConfig = {
   leader: { id: 'andy', ...DEFAULT_AGENT_CONFIGS.leader },
@@ -48,6 +54,11 @@ export class AgentOrchestrator {
   private channelMessenger: ChannelMessenger | null = null;
   private localAgents: Set<string>;
   private pendingChannelTasks: Map<string, { resolve: (result: ProcessResult) => void; reject: (err: Error) => void }> = new Map();
+  private roleRegistry: AgentRoleRegistry = new AgentRoleRegistry();
+  private taskPlanner!: TaskPlanner;
+  private taskContextStore: TaskContextStore = new TaskContextStore();
+  private progressReporter: ProgressReporter = new ProgressReporter();
+  private clarificationHandler: ClarificationHandler = new ClarificationHandler();
 
   constructor(rawDb: Database, config: Partial<OrchestratorConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -60,17 +71,27 @@ export class AgentOrchestrator {
       this.config.leader.id,
       ...this.config.workers.map(w => w.id),
     ]);
+    
   }
 
   initialize(): void {
     this.agentRegistry.initializeDefaultAgents();
+    const roles = getRoles();
+    this.roleRegistry.loadFromConfig(roles);
+    this.taskPlanner = new TaskPlanner(
+      this.config.leader.model,
+      [this.config.leader, ...this.config.workers],
+      roles,
+    );
+    this.taskContextStore.startSweep();
+    this.progressReporter.startCleanup();
     this.startHealthMonitor();
     this.startTaskPoller();
-    
+
     if (this.config.teamChannel?.enabled && this.config.teamChannel.channelId) {
       this.initializeChannelMessenger();
     }
-    
+
     logger.info('Agent Orchestrator initialized');
   }
 
@@ -119,6 +140,7 @@ export class AgentOrchestrator {
       
       if (this.channelMessenger) {
         this.channelMessenger.startListening((msg) => this.handleChannelMessage(msg));
+        this.progressReporter.setChannelSender(this.channelMessenger);
         logger.info({ platform: this.config.teamChannel.platform }, 'Channel messenger initialized');
       }
     } catch (err) {
@@ -129,6 +151,12 @@ export class AgentOrchestrator {
   private handleChannelMessage(msg: ParsedChannelMessage): void {
     if (msg.fromHuman) {
       this.handleHumanInterruption(msg);
+      return;
+    }
+
+    const payload = msg.nanoclawPayload;
+    if (payload) {
+      this.handleNanoclawMessage(msg, payload);
       return;
     }
 
@@ -145,6 +173,129 @@ export class AgentOrchestrator {
           });
         }
       }
+    }
+  }
+
+  private handleNanoclawMessage(msg: ParsedChannelMessage, payload: Record<string, any>): void {
+    switch (msg.taskType) {
+      case 'assign':
+        this.handleAssignMessage(msg, payload);
+        break;
+      case 'ask':
+        this.handleAskMessage(msg, payload);
+        break;
+      case 'answer':
+        this.handleAnswerMessage(msg, payload);
+        break;
+      case 'status':
+      case 'plan':
+      case 'artifact':
+        logger.debug({ taskType: msg.taskType, fromAgent: msg.fromAgent }, 'Nanoclaw message type received');
+        break;
+      case 'done':
+        if (msg.taskId) {
+          const pending = this.pendingChannelTasks.get(msg.taskId);
+          if (pending) {
+            this.pendingChannelTasks.delete(msg.taskId);
+            pending.resolve({
+              success: true,
+              result: payload.result || msg.content,
+              taskId: msg.taskId,
+              agentId: msg.fromAgent || 'unknown',
+            });
+          }
+        }
+        break;
+      default:
+        logger.warn({ taskType: msg.taskType }, 'Unknown nanoclaw message type');
+    }
+  }
+
+  private handleAskMessage(msg: ParsedChannelMessage, payload: Record<string, any>): void {
+    if (msg.fromHuman) return;
+    
+    const { taskId, subtaskId, question } = payload;
+    logger.info({ taskId, subtaskId, fromAgent: msg.fromAgent, question: question?.slice(0, 100) }, 'Ask message received from agent');
+    
+    if (this.channelMessenger) {
+      const questionText = `🤔 **${msg.fromAgent} needs clarification**:\n\n${question || 'Question not specified'}\n\nPlease reply to help ${msg.fromAgent} proceed.`;
+      this.channelMessenger.sendAsAgent(msg.fromAgent, questionText).catch(err =>
+        logger.error({ err }, 'Failed to send clarification question to channel')
+      );
+    }
+  }
+
+  private handleAnswerMessage(msg: ParsedChannelMessage, payload: Record<string, any>): void {
+    if (msg.fromHuman) return;
+    
+    const { taskId, subtaskId, answer } = payload;
+    logger.info({ taskId, subtaskId, fromAgent: msg.fromAgent, answer: answer?.slice(0, 100) }, 'Answer message received');
+    
+    if (taskId) {
+      const wasResolved = this.clarificationHandler.handleAnswer(taskId, answer || '');
+      if (!wasResolved) {
+        logger.warn({ taskId }, 'No pending clarification found for answer');
+      }
+    }
+  }
+
+  private handleAssignMessage(msg: ParsedChannelMessage, payload: Record<string, any>): void {
+    const { taskId, subtaskId, toAgent, description } = payload;
+    logger.info({ taskId, subtaskId, toAgent, description, fromAgent: msg.fromAgent }, 'Assign message received');
+    
+    const targetAgent = this.agentRegistry.getAgent(toAgent);
+    
+    if (!targetAgent) {
+      logger.warn({ toAgent }, 'Target agent not found in registry');
+      return;
+    }
+    
+    const taskType = this.roleMap(targetAgent.role);
+    
+    const subtask = this.taskQueue.createTask({
+      type: taskType as any,
+      prompt: description,
+      fromAgent: msg.fromAgent || this.config.leader.id,
+      toAgent: targetAgent.id,
+      parentTaskId: taskId,
+    });
+    
+    if (this.localAgents.has(targetAgent.id)) {
+      logger.info({ subtaskId, targetAgent: targetAgent.id }, 'Assigning subtask locally');
+      this.agentRegistry.updateStatus(targetAgent.id, 'busy');
+      this.agentRegistry.setCurrentTask(targetAgent.id, subtask.id);
+      this.executeTask(subtask, targetAgent)
+        .then(result => {
+          if (this.channelMessenger && taskId) {
+            const payloadResult = { result: result.result, subtaskId };
+            this.channelMessenger.sendAsAgent(targetAgent.id, `[nanoclaw:done] ${JSON.stringify(payloadResult)}`).catch(err =>
+              logger.error({ err }, 'Failed to send done message'),
+            );
+          }
+        })
+        .catch(err => {
+          logger.error({ err, targetAgent: targetAgent.id, subtaskId }, 'Subtask execution failed');
+          if (this.channelMessenger && taskId) {
+            const payloadResult = { error: err instanceof Error ? err.message : String(err), subtaskId };
+            this.channelMessenger.sendAsAgent(targetAgent.id, `[nanoclaw:done] ${JSON.stringify(payloadResult)}`).catch(e =>
+              logger.error({ e }, 'Failed to send error message'),
+            );
+          }
+        });
+    } else if (this.channelMessenger) {
+      logger.info({ subtaskId, targetAgent: targetAgent.id }, 'Assigning subtask via channel');
+      this.delegateViaChannel(subtask, targetAgent.id, subtaskId)
+        .then(result => {
+          if (result.success && this.channelMessenger && taskId) {
+            const payloadResult = { result: result.result, subtaskId };
+            this.channelMessenger.sendAsAgent(targetAgent.id, `[nanoclaw:done] ${JSON.stringify(payloadResult)}`).catch(err =>
+              logger.error({ err }, 'Failed to send done message'),
+            );
+          }
+        })
+        .catch(err => {
+          logger.error({ err, targetAgent: targetAgent.id, subtaskId }, 'Channel subtask delegation failed');
+        });
     }
   }
 
@@ -175,6 +326,13 @@ export class AgentOrchestrator {
 
     if (msg.mentions.includes(this.config.leader.id)) {
       logger.info({ content: msg.content.slice(0, 100) }, 'Human message to leader - treating as new task');
+    }
+
+    if (this.clarificationHandler.getPendingCount() > 0) {
+      const wasResolved = this.clarificationHandler.handleAnswer(msg.taskId || '', msg.content);
+      if (wasResolved) {
+        logger.info({ taskId: msg.taskId }, 'Human message treated as clarification answer');
+      }
     }
   }
 
@@ -216,42 +374,133 @@ export class AgentOrchestrator {
   }
 
   classifyTask(prompt: string): TaskClassification {
-    const lowerPrompt = prompt.toLowerCase();
-    const scores: Record<string, number> = {};
+    const classifiedRole = this.roleRegistry.classifyTask(prompt);
+    
+    const roleMap: Record<string, TaskClassification['type']> = {
+      leader: 'general',
+      researcher: 'research',
+      coder: 'code',
+      reviewer: 'review',
+      writer: 'write',
+    };
+    
+    const type = roleMap[classifiedRole] || 'general';
+    const agent = this.agentRegistry.selectBestAgentForTask(type);
 
-    for (const [type, keywords] of Object.entries(TASK_KEYWORDS)) {
-      if (type === 'general') continue;
-      scores[type] = keywords.reduce((score, keyword) => {
-        return lowerPrompt.includes(keyword.toLowerCase()) ? score + 1 : score;
-      }, 0);
-    }
+    return {
+      type,
+      confidence: 0.7,
+      suggestedAgent: agent?.id || classifiedRole,
+    };
+  }
 
-    let bestType = 'general';
-    let bestScore = 0;
+  private isComplexTask(prompt: string): boolean {
+    const wordCount = prompt.split(/\s+/).length;
+    const complexKeywords = ['and', 'then', 'also', 'furthermore', 'additionally', 'moreover', 'và', 'sau đó', 'cũng'];
+    const hasComplexStructure = complexKeywords.some(keyword => 
+      prompt.toLowerCase().includes(keyword)
+    );
+    
+    return wordCount > 50 || hasComplexStructure;
+  }
 
-    for (const [type, score] of Object.entries(scores)) {
-      if (score > bestScore) {
-        bestScore = score;
-        bestType = type;
+  private async processComplexTask(
+    prompt: string,
+    context: {
+      userId?: string;
+      chatJid?: string;
+    } = {},
+  ): Promise<ProcessResult> {
+    const plan = await this.taskPlanner.plan(prompt, [this.config.leader, ...this.config.workers]);
+
+    logger.info({ taskId: plan.taskId, subtaskCount: plan.subtasks.length }, 'Processing complex task with plan');
+
+    this.taskContextStore.create(plan.taskId, plan);
+
+    // Keep dispatching waves of ready subtasks until the entire plan is complete.
+    // Each iteration: run all currently-ready subtasks in parallel, record results,
+    // then check whether newly-unlocked subtasks became ready.
+    while (!this.taskContextStore.isComplete(plan.taskId)) {
+      const readySubtasks = this.taskContextStore.getReadySubtasks(plan.taskId);
+
+      if (readySubtasks.length === 0) {
+        // No subtasks ready and plan not complete — dependency graph is broken or a
+        // subtask failed without being recorded.  Bail out to avoid infinite loop.
+        logger.warn({ taskId: plan.taskId }, 'No ready subtasks but plan not complete, aborting');
+        break;
+      }
+
+      // Run ready subtasks in parallel
+      const wave = await Promise.all(
+        readySubtasks.map(subtask => this.executeSubtask(subtask, plan, context)),
+      );
+
+      // Record every result (success or failure) so dependency tracking advances
+      for (let i = 0; i < readySubtasks.length; i++) {
+        const subtask = readySubtasks[i];
+        const result = wave[i];
+        const value = result.success ? (result.result || '') : `[ERROR] ${result.error || 'unknown'}`;
+        this.taskContextStore.recordResult(plan.taskId, subtask.id, value);
+        logger.debug({ taskId: plan.taskId, subtaskId: subtask.id, success: result.success }, 'Subtask result recorded');
       }
     }
 
-    const roleMap: Record<string, AgentRole> = {
-      research: 'researcher',
-      code: 'coder',
-      review: 'reviewer',
-      write: 'writer',
-      general: 'researcher',
-    };
-
-    const role = roleMap[bestType] || 'researcher';
-    const agent = this.agentRegistry.selectBestAgentForTask(bestType);
+    const completedResults = this.taskContextStore.getCompletedResults(plan.taskId);
+    const allValues = Array.from(completedResults.values());
+    const hasErrors = allValues.some(v => v.startsWith('[ERROR]'));
 
     return {
-      type: bestType as TaskClassification['type'],
-      confidence: bestScore > 0 ? Math.min(bestScore / 3, 1) : 0.3,
-      suggestedAgent: agent?.id || role,
+      success: !hasErrors,
+      result: this.synthesizeResults(plan, allValues),
+      taskId: plan.taskId,
+      agentId: this.config.leader.id,
+      ...(hasErrors ? { error: 'One or more subtasks failed' } : {}),
     };
+  }
+
+  private async executeSubtask(
+    subtask: any,
+    plan: any,
+    context: { userId?: string; chatJid?: string } = {},
+  ): Promise<ProcessResult> {
+    const task = this.taskQueue.createTask({
+      type: this.roleMap(subtask.role) as any,
+      prompt: subtask.description,
+      fromAgent: this.config.leader.id,
+      userId: context.userId,
+      chatJid: context.chatJid,
+    });
+
+    const agent = this.agentRegistry.getAgentByRole(subtask.role);
+    
+    if (!agent) {
+      return {
+        success: false,
+        error: `No agent found for role: ${subtask.role}`,
+        taskId: task.id,
+        agentId: 'unknown',
+      };
+    }
+
+    this.agentRegistry.updateStatus(agent.id, 'busy');
+    this.agentRegistry.setCurrentTask(agent.id, task.id);
+    
+    return this.executeTask(task, agent);
+  }
+
+  private roleMap(role: string): string {
+    const map: Record<string, string> = {
+      leader: 'general',
+      researcher: 'research',
+      coder: 'code',
+      reviewer: 'review',
+      writer: 'write',
+    };
+    return map[role] || 'general';
+  }
+
+  private synthesizeResults(plan: any, results: string[]): string {
+    return results.join('\n\n---\n\n');
   }
 
   async processUserMessage(
@@ -263,6 +512,13 @@ export class AgentOrchestrator {
   ): Promise<ProcessResult> {
     const classification = this.classifyTask(prompt);
     logger.info({ prompt: prompt.slice(0, 100), classification }, 'Processing user message');
+
+    const isComplex = this.isComplexTask(prompt);
+
+    if (isComplex) {
+      logger.info({ prompt: prompt.slice(0, 100) }, 'Task is complex, using TaskPlanner');
+      return this.processComplexTask(prompt, context);
+    }
 
     const task = this.taskQueue.createTask({
       type: classification.type,
@@ -316,7 +572,7 @@ export class AgentOrchestrator {
     }
   }
 
-  private async delegateViaChannel(task: SwarmTask, targetAgent: string): Promise<ProcessResult> {
+  private async delegateViaChannel(task: SwarmTask, targetAgent: string, subtaskId?: string): Promise<ProcessResult> {
     if (!this.channelMessenger) {
       return {
         success: false,
@@ -330,7 +586,7 @@ export class AgentOrchestrator {
                      task.type === 'code' ? 'code' :
                      task.type === 'review' ? 'review' : 'general';
 
-    const message = `@${targetAgent} [${taskType}] #${task.id} ${task.prompt}`;
+    const message = `@${targetAgent} [${taskType}] #${subtaskId || task.id} ${task.prompt}`;
 
     try {
       await this.channelMessenger.sendAsAgent(this.config.leader.id, message);
@@ -409,19 +665,26 @@ export class AgentOrchestrator {
 
   private async executeTask(task: SwarmTask, agent?: SwarmAgent): Promise<ProcessResult> {
     const startTime = Date.now();
+    const agentId = agent?.id || 'unknown';
 
     try {
       this.taskQueue.startTask(task.id);
+      
+      await this.progressReporter.report(agentId, task.id, 'thinking');
+      await this.progressReporter.report(agentId, task.id, 'working', task.prompt.slice(0, 50));
 
       const result = await this.callModel(
         agent?.model || 'gemini-2.0-flash',
         task.prompt,
+        agent?.role,
         task.context,
       );
 
       const duration = Date.now() - startTime;
 
       if (result.success) {
+        await this.progressReporter.report(agentId, task.id, 'done');
+        
         this.taskQueue.completeTask(task.id, result.result || '', result.tokensUsed, result.cost);
         this.messenger.sendMessage({
           fromAgent: agent?.id || 'unknown',
@@ -518,16 +781,23 @@ export class AgentOrchestrator {
   private async callModel(
     model: string,
     prompt: string,
+    agentRole?: string,
     context?: string,
     systemPrompt?: string,
   ): Promise<{ success: boolean; result?: string; error?: string; tokensUsed?: number; cost?: number }> {
     try {
       const fullPrompt = context ? `Context:\n${context}\n\nTask:\n${prompt}` : prompt;
 
+      const role = agentRole ? this.roleRegistry.getRole(agentRole) : undefined;
+      const roleDefaultPrompt = role?.defaultPrompt;
+      const combinedSystemPrompt = roleDefaultPrompt && systemPrompt
+        ? `${roleDefaultPrompt}\n\n${systemPrompt}`
+        : roleDefaultPrompt || systemPrompt;
+
       const response = await llmProvider.generate(
         { provider: 'opencode', model, timeoutMs: 120000 },
         fullPrompt,
-        systemPrompt,
+        combinedSystemPrompt,
       );
 
       return {
@@ -547,16 +817,30 @@ export class AgentOrchestrator {
   async *streamModel(
     model: string,
     prompt: string,
+    agentRole?: string,
+    agentId?: string,
     context?: string,
     systemPrompt?: string,
   ): AsyncGenerator<{ content: string; done: boolean }> {
     const fullPrompt = context ? `Context:\n${context}\n\nTask:\n${prompt}` : prompt;
-
+ 
     try {
+      const role = agentRole ? this.roleRegistry.getRole(agentRole) : undefined;
+      const roleDefaultPrompt = role?.defaultPrompt;
+      const combinedSystemPrompt = roleDefaultPrompt && systemPrompt
+        ? `${roleDefaultPrompt}\n\n${systemPrompt}`
+        : roleDefaultPrompt || systemPrompt;
+ 
+      if (agentId && this.channelMessenger?.sendTypingIndicator) {
+        this.channelMessenger.sendTypingIndicator(agentId).catch(err => 
+          logger.debug({ agentId, err }, 'Failed to send typing indicator')
+        );
+      }
+
       for await (const chunk of llmProvider.generateStream(
         { provider: 'opencode', model, timeoutMs: 120000 },
         fullPrompt,
-        systemPrompt,
+        combinedSystemPrompt,
       )) {
         yield { content: chunk.content, done: chunk.done };
       }
@@ -764,7 +1048,10 @@ export class AgentOrchestrator {
     if (this.channelMessenger) {
       this.channelMessenger.stopListening();
       await this.channelMessenger.disconnect();
+      this.progressReporter.setChannelSender(null);
     }
+    this.taskContextStore.stopSweep();
+    this.progressReporter.stopCleanup();
     logger.info('Agent Orchestrator shutdown');
   }
 
