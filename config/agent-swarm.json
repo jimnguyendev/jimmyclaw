@@ -1,4 +1,13 @@
 {
+  "teamChannel": {
+    "platform": "discord",
+    "channelId": "",
+    "enabled": false
+  },
+  "instance": {
+    "id": "default",
+    "localAgents": ["andy", "sarah", "mike", "emma"]
+  },
   "leader": {
     "id": "andy",
     "role": "leader",

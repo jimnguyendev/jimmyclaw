@@ -4,8 +4,12 @@
   "description": "Personal Claude assistant. Lightweight, secure, customizable.",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "nanoclaw": "./dist/cli/index.js"
+  },
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun",
+    "build": "bun build src/index.ts --outdir dist --target bun && bun run build:cli",
+    "build:cli": "bun build src/cli/index.ts --outdir dist/cli --target bun --external react-devtools-core",
     "start": "bun run dist/index.js",
     "dev": "bun run src/index.ts",
     "auth": "bun run src/whatsapp-auth.ts",
@@ -19,17 +23,24 @@
     "test:watch": "bun test --watch"
   },
   "dependencies": {
+    "@inquirer/prompts": "^8.3.0",
+    "chalk": "^5.6.2",
+    "cli-table3": "^0.6.5",
+    "commander": "^14.0.3",
     "cron-parser": "^5.5.0",
     "discord.js": "^14.25.1",
     "drizzle-orm": "^0.39.0",
     "grammy": "^1.39.3",
+    "ink": "^6.8.0",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
+    "react": "^19.2.4",
     "yaml": "^2.8.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/react": "^19.2.14",
     "bun-types": "^1.2.0",
     "drizzle-kit": "^0.30.0",
     "oxfmt": "^0.35.0",

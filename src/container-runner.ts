@@ -16,7 +16,7 @@ import {
   TIMEZONE,
 } from './config.js';
 import { readEnvFile } from './env.js';
-import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
+import { resolveGroupFolderPath, resolveGroupIpcPath, isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { CONTAINER_RUNTIME_BIN, readonlyMountArgs, stopContainer } from './container-runtime.js';
 import { validateAdditionalMounts } from './mount-security.js';
@@ -51,6 +51,11 @@ interface VolumeMount {
 }
 
 function buildVolumeMounts(group: RegisteredGroup, isMain: boolean): VolumeMount[] {
+  // Validate group folder to prevent path traversal
+  if (!isValidGroupFolder(group.folder)) {
+    throw new Error(`Invalid group folder: ${group.folder}`);
+  }
+  
   const mounts: VolumeMount[] = [];
   const projectRoot = process.cwd();
   const groupDir = resolveGroupFolderPath(group.folder);
@@ -92,6 +97,21 @@ function buildVolumeMounts(group: RegisteredGroup, isMain: boolean): VolumeMount
       });
     }
   }
+
+  // Shared workspace for agent team collaboration
+  // Structure: workspace/{group-folder}/docs/ and workspace/{group-folder}/code/
+  // This prevents agents from different groups from corrupting each other's files
+  const sharedWorkspaceDir = path.join(GROUPS_DIR, 'workspace');
+  const groupWorkspaceDir = path.join(sharedWorkspaceDir, group.folder);
+  const sharedDocsDir = path.join(groupWorkspaceDir, 'docs');
+  const sharedCodeDir = path.join(groupWorkspaceDir, 'code');
+  fs.mkdirSync(sharedDocsDir, { recursive: true });
+  fs.mkdirSync(sharedCodeDir, { recursive: true });
+  mounts.push({
+    hostPath: groupWorkspaceDir,
+    containerPath: '/workspace/shared',
+    readonly: false,
+  });
 
   // Per-group Claude sessions directory (isolated from other groups)
   // Each group gets their own .claude/ to prevent cross-group session access

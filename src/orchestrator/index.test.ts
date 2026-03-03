@@ -81,8 +81,8 @@ describe('AgentOrchestrator', () => {
     orchestrator.initialize();
   });
 
-  afterEach(() => {
-    orchestrator.shutdown();
+  afterEach(async () => {
+    await orchestrator.shutdown();
     db.close();
   });
 
@@ -265,6 +265,57 @@ describe('AgentOrchestrator', () => {
       
       expect(classification.type).toBe('research');
       expect(classification.suggestedAgent).toBe('sarah');
+    });
+  });
+
+  describe('channel messenger routing', () => {
+    it('should identify local agents correctly', () => {
+      const status = orchestrator.getStatus();
+      const localAgentIds = ['andy', 'sarah', 'mike', 'emma'];
+      
+      for (const agent of status.agents) {
+        expect(localAgentIds).toContain(agent.id);
+      }
+    });
+
+    it('should route to local agent when available', () => {
+      const classification = orchestrator.classifyTask('Research something');
+      expect(classification.suggestedAgent).toBe('sarah');
+      
+      const registry = orchestrator.getAgentRegistry();
+      const agent = registry.getAgent('sarah');
+      expect(agent).toBeDefined();
+      expect(agent?.role).toBe('researcher');
+    });
+
+    it('should have fallback models configured for agents', () => {
+      const registry = orchestrator.getAgentRegistry();
+      const agents = registry.getAllAgents();
+      
+      for (const agent of agents) {
+        expect(agent.model).toBeDefined();
+      }
+    });
+  });
+
+  describe('fallback logic', () => {
+    it('should find local agent by role', () => {
+      const registry = orchestrator.getAgentRegistry();
+      const researchers = registry.getAllAgents().filter(a => a.role === 'researcher');
+      
+      expect(researchers.length).toBeGreaterThan(0);
+      expect(researchers[0].id).toBe('sarah');
+    });
+
+    it('should have multiple agent roles available', () => {
+      const registry = orchestrator.getAgentRegistry();
+      const agents = registry.getAllAgents();
+      const roles = new Set(agents.map(a => a.role));
+      
+      expect(roles.has('leader')).toBe(true);
+      expect(roles.has('researcher')).toBe(true);
+      expect(roles.has('coder')).toBe(true);
+      expect(roles.has('reviewer')).toBe(true);
     });
   });
 });

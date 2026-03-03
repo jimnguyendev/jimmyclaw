@@ -47,6 +47,8 @@ import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 import { initSwarmMode, getOrchestrator, isSwarmEnabled, shutdownSwarm, runSwarmAgent } from './swarm.js';
 import { createSwarmCommandHandler, isSwarmCommand } from './swarm-commands.js';
+import { startApiServer, stopApiServer, ApiDeps } from './api-server.js';
+import { loadSwarmConfig, saveSwarmConfig, addWorkerAgent, removeWorkerAgent, renameAgent, updateAgentModel, updateAgentSystemPrompt, updateSettings, getOrchestratorConfig, resetToDefault } from './swarm-config.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -56,6 +58,7 @@ let sessions: Record<string, string> = {};
 let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
+let daemonStartTime = Date.now();
 
 let channels: Channel[] = [];
 const queue = new GroupQueue();
@@ -173,8 +176,15 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   if (isSwarmEnabled()) {
     logger.info({ group: group.name }, 'Routing to swarm agent');
     
+    const SWARM_TIMEOUT_MS = parseInt(process.env.SWARM_TIMEOUT || '120000', 10);
+    
     try {
-      const swarmResult = await runSwarmAgent(group, prompt, chatJid);
+      const swarmPromise = runSwarmAgent(group, prompt, chatJid);
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Swarm agent timeout')), SWARM_TIMEOUT_MS)
+      );
+      
+      const swarmResult = await Promise.race([swarmPromise, timeoutPromise]);
       
       if (swarmResult.status === 'success' && swarmResult.result) {
         await channel.sendMessage(chatJid, swarmResult.result);
@@ -186,8 +196,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       saveState();
       return true;
     } catch (error) {
-      logger.error({ group: group.name, error }, 'Swarm agent error');
-      await channel.sendMessage(chatJid, `❌ Swarm error: ${error instanceof Error ? error.message : 'Unknown'}`);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown';
+      logger.error({ group: group.name, error: errorMsg }, 'Swarm agent error');
+      await channel.sendMessage(chatJid, `❌ Swarm error: ${errorMsg}`);
       lastAgentTimestamp[chatJid] = missedMessages[missedMessages.length - 1].timestamp;
       saveState();
       return false;
@@ -464,15 +475,131 @@ async function main(): Promise<void> {
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
-    if (isSwarmEnabled()) {
-      shutdownSwarm();
-    }
+    stopApiServer();
+    
+    // First, signal queue to stop accepting new work
     await queue.shutdown(10000);
+    
+    // Then disconnect swarm (channel messenger for agent team)
+    if (isSwarmEnabled()) {
+      await shutdownSwarm();
+    }
+    
+    // Finally disconnect communication channels
     for (const ch of channels) await ch.disconnect();
     process.exit(0);
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+
+  // Start API server for CLI
+  startApiServer({
+    getOrchestratorStatus: () => {
+      const memUsage = process.memoryUsage();
+      const orchestrator = getOrchestrator();
+      const status = orchestrator?.getStatus();
+      return {
+        status: 'running',
+        uptime: Math.floor((Date.now() - daemonStartTime) / 1000),
+        startTime: daemonStartTime,
+        memory: { used: memUsage.heapUsed, total: memUsage.heapTotal },
+        platform: process.platform,
+        tasksToday: 0,
+        successCount: 0,
+        failedCount: 0,
+        costToday: 0,
+        agents: status ? status.agents.length : 0,
+        pendingTasks: status?.pendingTasks || 0,
+        processingTasks: status?.processingTasks || 0,
+      };
+    },
+    getAgents: () => {
+      const config = loadSwarmConfig();
+      return [
+        { id: config.leader.id, role: config.leader.role, model: config.leader.model, status: 'idle' },
+        ...config.workers.map(w => ({ id: w.id, role: w.role, model: w.model, status: 'idle' as const })),
+      ];
+    },
+    addAgent: (agent) => addWorkerAgent({
+      id: agent.id,
+      role: agent.role as import('./orchestrator/types.js').AgentRole,
+      model: agent.model,
+      fallbackModel: agent.fallbackModel,
+      systemPrompt: agent.systemPrompt,
+    }),
+    updateAgent: (id, updates) => {
+      let ok = false;
+      if (updates.model) ok = updateAgentModel(id, updates.model as string) || ok;
+      if (updates.systemPrompt !== undefined) ok = updateAgentSystemPrompt(id, updates.systemPrompt as string) || ok;
+      return ok;
+    },
+    removeAgent: (id) => removeWorkerAgent(id),
+    renameAgent: (oldId, newId) => renameAgent(oldId, newId),
+    getTasks: () => {
+      const orchestrator = getOrchestrator();
+      if (!orchestrator) return [];
+      return orchestrator.getTaskQueue().getTasksByStatus('pending').concat(
+        orchestrator.getTaskQueue().getTasksByStatus('processing')
+      );
+    },
+    getTask: (id) => {
+      const orchestrator = getOrchestrator();
+      if (!orchestrator) return undefined;
+      return orchestrator.getTaskQueue().getTask(id);
+    },
+    getConfig: () => loadSwarmConfig(),
+    updateConfig: (updates) => {
+      const config = loadSwarmConfig();
+      if (updates.settings) {
+        updateSettings(updates.settings as Record<string, unknown>);
+      }
+      if (updates.teamChannel) {
+        config.teamChannel = updates.teamChannel as typeof config.teamChannel;
+        saveSwarmConfig(config);
+      }
+    },
+    resetConfig: () => resetToDefault(),
+    reloadConfig: async () => {
+      const { reloadConfig } = await import('./swarm-config.js');
+      await reloadConfig();
+    },
+    getLogs: (params) => {
+      const logFile = path.join(process.cwd(), 'store', 'logs', 'nanoclaw.log');
+      if (!fs.existsSync(logFile)) return [];
+      try {
+        const content = fs.readFileSync(logFile, 'utf-8');
+        let lines = content.split('\n').filter(Boolean);
+        if (params.agent) {
+          lines = lines.filter(l => l.toLowerCase().includes(params.agent!.toLowerCase()));
+        }
+        if (params.level) {
+          lines = lines.filter(l => l.toLowerCase().includes(`"level":"${params.level!.toLowerCase()}"`));
+        }
+        if (params.lines) {
+          lines = lines.slice(-params.lines);
+        }
+        return lines.map(l => {
+          try {
+            return JSON.parse(l);
+          } catch {
+            return { raw: l };
+          }
+        });
+      } catch {
+        return [];
+      }
+    },
+    getTeamChannel: () => {
+      const config = loadSwarmConfig();
+      return config.teamChannel || { platform: null, channelId: null, enabled: false };
+    },
+    setTeamChannel: (config) => {
+      const swarmConfig = loadSwarmConfig();
+      swarmConfig.teamChannel = config as typeof swarmConfig.teamChannel;
+      saveSwarmConfig(swarmConfig);
+    },
+  });
+  logger.info('API server started');
 
   // Channel callbacks (shared by all channels)
   const channelOpts = {

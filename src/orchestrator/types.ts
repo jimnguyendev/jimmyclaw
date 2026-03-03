@@ -4,6 +4,25 @@ export type TaskStatus = 'pending' | 'assigned' | 'processing' | 'done' | 'faile
 export type AgentStatus = 'idle' | 'busy' | 'offline' | 'spawning';
 export type MessageType = 'task_assign' | 'task_result' | 'task_failed' | 'query' | 'reply' | 'broadcast' | 'heartbeat';
 
+export interface TeamChannelConfig {
+  platform: 'discord' | 'telegram';
+  channelId: string;
+  enabled: boolean;
+}
+
+/**
+ * Telegram channel ID format notes:
+ * - Plain numeric ID: "-1001234567890" (direct chat ID from Telegram)
+ * - Prefixed format: "tg:-1001234567890" (for consistency with other codebase parts)
+ * 
+ * Both formats are supported in channel-messenger.ts
+ */
+
+export interface InstanceConfig {
+  id: string;
+  localAgents: string[];
+}
+
 export interface AgentConfig {
   id: string;
   role: AgentRole;
@@ -69,6 +88,8 @@ export interface TaskClassification {
 }
 
 export interface OrchestratorConfig {
+  teamChannel?: TeamChannelConfig;
+  instance?: InstanceConfig;
   leader: AgentConfig;
   workers: AgentConfig[];
   maxParallelTasks: number;
@@ -114,6 +135,20 @@ export const DEFAULT_AGENT_CONFIGS: Record<AgentRole, Omit<AgentConfig, 'id'>> =
 - Emma (reviewer): Code review, quality checks, improvements
 - Alex (writer): Documentation, guides, content writing
 
+**Shared Workspace:**
+All agents share /workspace/shared/ for collaboration:
+- Documents: /workspace/shared/docs/ — for research notes, specs, documentation
+- Code: /workspace/shared/code/ — for shared code files
+- When output is long (>400 chars), save to file and mention the path
+- Reference files using relative paths: docs/filename.md or code/file.ts
+
+**Workspace Structure:**
+/workspace/
+  ├── shared/          ← Shared across all agents in the same group
+  │   ├── docs/        ← Research notes, documentation, specs
+  │   └── code/        ← Code files, examples, implementations
+  └── group-{id}/      ← Per-group isolated workspace (if enabled)
+
 **Task Classification Keywords:**
 - Research: "tìm hiểu", "research", "analyze", "phân tích", "search"
 - Code: "viết code", "code", "implement", "function", "bug", "lập trình"
@@ -142,6 +177,12 @@ You: Classify → Research → Delegate to Sarah → Return Sarah's result in Vi
 - Research and information gathering
 - Analysis and summarization
 - Fact-checking and source verification
+
+**Shared Workspace:**
+Use /workspace/shared/ for collaboration with other agents:
+- Save long outputs (>400 chars) to /workspace/shared/docs/{task-id}-research.md
+- Mention file paths in your messages so other agents can find them
+- Read files from /workspace/shared/ when referenced by other agents
 
 **Response Rules:**
 - ALWAYS respond in the SAME LANGUAGE as the request
@@ -172,6 +213,12 @@ You: Classify → Research → Delegate to Sarah → Return Sarah's result in Vi
 - Technical implementation
 - Code explanation
 
+**Shared Workspace:**
+Use /workspace/shared/ for collaboration with other agents:
+- Save code files to /workspace/shared/code/{filename}.{ext}
+- Read specs/docs from /workspace/shared/docs/ when referenced
+- Save long outputs (>400 chars) to files instead of pasting
+
 **Response Rules:**
 - ALWAYS respond in the SAME LANGUAGE as the request
 - Vietnamese request → Vietnamese response + code
@@ -201,6 +248,12 @@ You: Classify → Research → Delegate to Sarah → Return Sarah's result in Vi
 - Best practices recommendations
 - Security and performance checks
 
+**Shared Workspace:**
+Use /workspace/shared/ for collaboration with other agents:
+- Read code files from /workspace/shared/code/ for review
+- Save detailed review notes to /workspace/shared/docs/{task-id}-review.md
+- Reference files by their paths in your messages
+
 **Response Rules:**
 - ALWAYS respond in the SAME LANGUAGE as the request
 - Be constructive and specific
@@ -227,6 +280,12 @@ You: Classify → Research → Delegate to Sarah → Return Sarah's result in Vi
 - Guides and tutorials
 - README files
 - Blog posts and articles
+
+**Shared Workspace:**
+Use /workspace/shared/ for collaboration with other agents:
+- Save documentation to /workspace/shared/docs/{filename}.md
+- Read source files from /workspace/shared/code/ when documenting code
+- Reference related docs by their paths
 
 **Response Rules:**
 - ALWAYS respond in the SAME LANGUAGE as the request

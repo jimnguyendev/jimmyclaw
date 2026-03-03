@@ -2,12 +2,14 @@ import fs from 'fs';
 import path from 'path';
 
 import { DATA_DIR } from './config.js';
-import { AgentConfig, AgentRole, OrchestratorConfig, DEFAULT_AGENT_CONFIGS } from './orchestrator/types.js';
+import { AgentConfig, AgentRole, OrchestratorConfig, TeamChannelConfig, InstanceConfig, DEFAULT_AGENT_CONFIGS } from './orchestrator/types.js';
 import { logger } from './logger.js';
 
 export interface SwarmConfigFile {
   leader: AgentConfig;
   workers: AgentConfig[];
+  teamChannel?: TeamChannelConfig;
+  instance?: InstanceConfig;
   settings: {
     maxParallelTasks: number;
     taskTimeoutMs: number;
@@ -24,6 +26,7 @@ const CONFIG_PATH = path.join(DATA_DIR, 'swarm-config.json');
 const DEFAULT_CONFIG_PATH = path.join(process.cwd(), 'config', 'agent-swarm.json');
 
 let cachedConfig: SwarmConfigFile | null = null;
+let configLock: Promise<void> | null = null;
 
 export function getSwarmConfigPath(): string {
   if (fs.existsSync(CONFIG_PATH)) {
@@ -235,7 +238,16 @@ export function resetToDefault(): void {
   createDefaultConfig();
 }
 
-export function reloadConfig(): SwarmConfigFile {
-  cachedConfig = null;
-  return loadSwarmConfig();
+export async function reloadConfig(): Promise<SwarmConfigFile> {
+  const operation = (async () => {
+    cachedConfig = null;
+    return loadSwarmConfig();
+  })();
+
+  configLock = operation.then(() => {
+    configLock = null;
+  });
+
+  await operation;
+  return operation;
 }

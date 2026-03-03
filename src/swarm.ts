@@ -62,9 +62,9 @@ export async function runSwarmAgent(
   }
 }
 
-export function shutdownSwarm(): void {
+export async function shutdownSwarm(): Promise<void> {
   if (orchestrator) {
-    orchestrator.shutdown();
+    await orchestrator.shutdown();
     orchestrator = null;
     swarmEnabled = false;
     logger.info('Swarm mode shutdown');

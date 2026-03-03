@@ -12,6 +12,9 @@ const envConfig = readEnvFile([
   'TELEGRAM_BOT_TOKEN',
   'TELEGRAM_ONLY',
   'DISCORD_BOT_TOKEN',
+  'TEAM_CHANNEL_PLATFORM',
+  'INSTANCE_ID',
+  'INSTANCE_AGENTS',
 ]);
 
 export const ASSISTANT_NAME = process.env.ASSISTANT_NAME || envConfig.ASSISTANT_NAME || 'Andy';
@@ -35,6 +38,7 @@ export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');
 export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
 export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
 export const MAIN_GROUP_FOLDER = 'main';
+export const SOCKET_PATH = path.join(STORE_DIR, 'nanoclaw.sock');
 
 export const CONTAINER_IMAGE = process.env.CONTAINER_IMAGE || 'nanoclaw-agent:latest';
 export const CONTAINER_TIMEOUT = parseInt(process.env.CONTAINER_TIMEOUT || '1800000', 10);
@@ -71,6 +75,18 @@ export const TELEGRAM_BOT_POOL = (process.env.TELEGRAM_BOT_POOL || '')
 export const SWARM_ENABLED = process.env.SWARM_ENABLED === 'true';
 export const SWARM_MAX_PARALLEL_TASKS = parseInt(process.env.SWARM_MAX_PARALLEL_TASKS || '4', 10);
 export const SWARM_TASK_TIMEOUT_MS = parseInt(process.env.SWARM_TASK_TIMEOUT_MS || '300000', 10);
+
+// Team channel / multi-instance
+export const TEAM_CHANNEL_PLATFORM = (
+  process.env.TEAM_CHANNEL_PLATFORM || envConfig.TEAM_CHANNEL_PLATFORM || ''
+) as 'discord' | 'telegram' | '';
+
+export const INSTANCE_ID = process.env.INSTANCE_ID || envConfig.INSTANCE_ID || 'default';
+
+export const INSTANCE_AGENTS = (process.env.INSTANCE_AGENTS || envConfig.INSTANCE_AGENTS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 export const DISCORD_BOT_TOKEN =
   process.env.DISCORD_BOT_TOKEN || envConfig.DISCORD_BOT_TOKEN || '';
