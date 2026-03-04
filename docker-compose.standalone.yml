@@ -1,0 +1,15 @@
+# Standalone overlay — bind mounts for easy access to data files on VPS.
+#
+# Files are stored directly on host disk (not in named volumes), making it
+# easy to edit group CLAUDE.md files, inspect logs, and backup data.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.standalone.yml up -d --build
+
+services:
+  jimmyclaw:
+    volumes:
+      - ./groups:/app/groups
+      - ./store:/app/store
+      - ./data:/app/data
+      - ./config:/app/config:ro

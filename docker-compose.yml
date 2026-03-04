@@ -1,0 +1,62 @@
+# Base docker-compose — shared service definition.
+# Combine with an overlay for your deployment mode:
+#
+#   Standalone (single VPS, bind mounts):
+#     docker compose -f docker-compose.yml -f docker-compose.standalone.yml up -d --build
+#
+#   Standalone + Agent Sandbox:
+#     docker compose -f docker-compose.yml -f docker-compose.standalone.yml -f docker-compose.sandbox.yml up -d --build
+#
+#   Multi-container (multiple instances sharing same data dir):
+#     INSTANCE_ID=worker-1 INSTANCE_AGENTS=sarah,mike \
+#     docker compose -f docker-compose.yml -f docker-compose.standalone.yml -f docker-compose.sandbox.yml up -d
+
+services:
+  jimmyclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile.daemon
+      args:
+        ENABLE_SANDBOX: "false"
+    image: jimmyclaw:latest
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - NODE_ENV=production
+      # Instance identity — override for multi-container deployments
+      - INSTANCE_ID=${INSTANCE_ID:-default}
+      - INSTANCE_AGENTS=${INSTANCE_AGENTS:-andy,sarah,mike,emma}
+      # API keys
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      - Z_AI_API_KEY=${Z_AI_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      # Channels
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_ONLY=${TELEGRAM_ONLY:-false}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      # Team channel
+      - TEAM_CHANNEL_PLATFORM=${TEAM_CHANNEL_PLATFORM:-}
+      - TEAM_CHANNEL_ENABLED=${TEAM_CHANNEL_ENABLED:-false}
+      - DISCORD_TEAM_CHANNEL_ID=${DISCORD_TEAM_CHANNEL_ID:-}
+      - DISCORD_BOT_TOKEN_ANDY=${DISCORD_BOT_TOKEN_ANDY:-}
+      - DISCORD_BOT_TOKEN_SARAH=${DISCORD_BOT_TOKEN_SARAH:-}
+      - DISCORD_BOT_TOKEN_MIKE=${DISCORD_BOT_TOKEN_MIKE:-}
+      - DISCORD_BOT_TOKEN_EMMA=${DISCORD_BOT_TOKEN_EMMA:-}
+      - TELEGRAM_TEAM_CHAT_ID=${TELEGRAM_TEAM_CHAT_ID:-}
+      - TELEGRAM_BOT_POOL_TOKENS=${TELEGRAM_BOT_POOL_TOKENS:-}
+      # Other
+      - ASSISTANT_NAME=${ASSISTANT_NAME:-Andy}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - TZ=${TZ:-UTC}
+    volumes:
+      - jimmyclaw-data:/app/data
+      - jimmyclaw-groups:/app/groups
+      - jimmyclaw-store:/app/store
+
+volumes:
+  jimmyclaw-data:
+  jimmyclaw-groups:
+  jimmyclaw-store:

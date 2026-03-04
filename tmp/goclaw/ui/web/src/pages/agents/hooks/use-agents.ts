@@ -1,0 +1,80 @@
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useWs, useHttp } from "@/hooks/use-ws";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { Methods } from "@/api/protocol";
+import { queryKeys } from "@/lib/query-keys";
+import type { AgentData } from "@/types/agent";
+
+interface AgentInfoWs {
+  id: string;
+  model: string;
+  isRunning: boolean;
+}
+
+export function useAgents() {
+  const ws = useWs();
+  const http = useHttp();
+  const connected = useAuthStore((s) => s.connected);
+  const queryClient = useQueryClient();
+
+  const { data: agents = [], isLoading: loading, error: queryError } = useQuery({
+    queryKey: queryKeys.agents.all,
+    queryFn: async () => {
+      // Try HTTP first (returns full agent data, filtered by user access)
+      try {
+        const res = await http.get<{ agents: AgentData[] }>("/v1/agents");
+        if (res.agents && res.agents.length > 0) {
+          return res.agents;
+        }
+      } catch {
+        // HTTP may fail if user doesn't have access - fall through to WS
+      }
+
+      // Fallback: WS agents.list returns all running agents (no access filter)
+      if (!ws.isConnected) return [];
+      const res = await ws.call<{ agents: AgentInfoWs[] }>(Methods.AGENTS_LIST);
+      return (res.agents ?? []).map((a): AgentData => ({
+        id: a.id,
+        agent_key: a.id,
+        owner_id: "",
+        provider: "",
+        model: a.model,
+        context_window: 0,
+        max_tool_iterations: 0,
+        workspace: "",
+        restrict_to_workspace: false,
+        agent_type: "open" as const,
+        is_default: false,
+        status: a.isRunning ? "running" : "idle",
+      }));
+    },
+    enabled: connected,
+  });
+
+  const error = queryError instanceof Error ? queryError.message : queryError ? "Failed to load agents" : null;
+
+  const invalidate = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.agents.all }),
+    [queryClient],
+  );
+
+  const createAgent = useCallback(
+    async (data: Partial<AgentData>) => {
+      const res = await http.post<AgentData>("/v1/agents", data);
+      await invalidate();
+      return res;
+    },
+    [http, invalidate],
+  );
+
+  const deleteAgent = useCallback(
+    async (id: string) => {
+      await http.delete(`/v1/agents/${id}`);
+      await invalidate();
+    },
+    [http, invalidate],
+  );
+
+  return { agents, loading, error, refresh: invalidate, createAgent, deleteAgent };
+}

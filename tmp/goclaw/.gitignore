@@ -1,0 +1,39 @@
+# Test artifacts
+tests/integration/testdata/
+
+# Binary
+openclaw-go
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Environment
+.env*
+!.env.example
+
+app
+browser-poc
+openclaw-go
+goclaw
+config.json
+prompt.md
+*.bk.*
+
+# UI Web (React SPA)
+ui/web/node_modules/
+ui/web/dist/
+ui/web/.vite/
+*.tsbuildinfo
+
+.mcp.json
+tmp
+.claude/
+
+deploy-*.sh
+
+docs/technical-diaries
+plans

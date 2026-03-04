@@ -1,0 +1,26 @@
+# Dependencies (reinstalled during build)
+node_modules/
+container/agent-runner/node_modules/
+container/rag-server/node_modules/
+
+# Runtime data (bind-mounted at runtime)
+store/
+groups/
+data/
+
+# Build artifacts
+dist/
+
+# Dev/test files
+.git/
+.claude/
+tmp/
+*.log
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store

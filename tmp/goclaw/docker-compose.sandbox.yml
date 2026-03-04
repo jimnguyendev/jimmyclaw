@@ -1,0 +1,35 @@
+# Sandbox overlay — enables Docker-based sandbox for agent code execution.
+#
+# Prerequisites:
+#   1. Build the sandbox image:  docker build -t goclaw-sandbox:bookworm-slim -f Dockerfile.sandbox .
+#   2. Ensure Docker socket is accessible
+#
+# Usage (with managed mode):
+#   docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.sandbox.yml up
+#
+# SECURITY NOTE: Mounting Docker socket gives the container control over host Docker.
+# Only use in trusted environments where agent code execution isolation is required.
+
+services:
+  goclaw:
+    build:
+      args:
+        ENABLE_SANDBOX: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - GOCLAW_SANDBOX_MODE=all
+      - GOCLAW_SANDBOX_IMAGE=goclaw-sandbox:bookworm-slim
+      - GOCLAW_SANDBOX_WORKSPACE_ACCESS=rw
+      - GOCLAW_SANDBOX_SCOPE=session
+      - GOCLAW_SANDBOX_MEMORY_MB=512
+      - GOCLAW_SANDBOX_CPUS=1.0
+      - GOCLAW_SANDBOX_TIMEOUT_SEC=300
+      - GOCLAW_SANDBOX_NETWORK=false
+    # Override base cap_drop to allow Docker socket access
+    cap_drop: []
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt: []
+    group_add:
+      - ${DOCKER_GID:-999}

@@ -1,0 +1,32 @@
+# Sandbox overlay — enables Docker socket so the daemon can spawn agent containers.
+#
+# Prerequisites:
+#   1. Build the agent container image:  docker build -t jimmyclaw-agent:latest -f container/Dockerfile container/
+#   2. Find your Docker group ID:        getent group docker | cut -d: -f3
+#
+# Usage (with standalone):
+#   docker compose -f docker-compose.yml -f docker-compose.standalone.yml -f docker-compose.sandbox.yml up -d --build
+#
+# SECURITY NOTE: Mounting Docker socket gives the container full control over
+# host Docker. Only use in trusted environments (your own VPS).
+
+services:
+  jimmyclaw:
+    build:
+      args:
+        ENABLE_SANDBOX: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # Critical: the HOST path where data lives, so spawned agent containers
+      # can be given correct bind mounts pointing back to host filesystem.
+      # Must match the bind mount paths in docker-compose.standalone.yml.
+      - HOST_PROJECT_ROOT=${HOST_PROJECT_ROOT:-/opt/jimmyclaw}
+      - CONTAINER_IMAGE=${CONTAINER_IMAGE:-jimmyclaw-agent:latest}
+    # Override cap_drop to allow Docker socket access
+    cap_drop: []
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt: []
+    group_add:
+      - ${DOCKER_GID:-999}

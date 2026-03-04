@@ -1,0 +1,45 @@
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useHttp } from "@/hooks/use-ws";
+import { queryKeys } from "@/lib/query-keys";
+
+export interface BuiltinToolData {
+  name: string;
+  display_name: string;
+  description: string;
+  category: string;
+  enabled: boolean;
+  settings: Record<string, unknown>;
+  requires: string[];
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export function useBuiltinTools() {
+  const http = useHttp();
+  const queryClient = useQueryClient();
+
+  const { data: tools = [], isLoading: loading } = useQuery({
+    queryKey: queryKeys.builtinTools.all,
+    queryFn: async () => {
+      const res = await http.get<{ tools: BuiltinToolData[] }>("/v1/tools/builtin");
+      return res.tools ?? [];
+    },
+  });
+
+  const invalidate = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.builtinTools.all }),
+    [queryClient],
+  );
+
+  const updateTool = useCallback(
+    async (name: string, data: { enabled?: boolean; settings?: Record<string, unknown> }) => {
+      await http.put(`/v1/tools/builtin/${name}`, data);
+      await invalidate();
+    },
+    [http, invalidate],
+  );
+
+  return { tools, loading, refresh: invalidate, updateTool };
+}

@@ -1,0 +1,84 @@
+import { useState, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useWs } from "@/hooks/use-ws";
+import { Methods } from "@/api/protocol";
+import { queryKeys } from "@/lib/query-keys";
+
+export interface TtsProviderConfig {
+  api_key?: string;
+  api_base?: string;
+  base_url?: string;
+  model?: string;
+  voice?: string;
+  voice_id?: string;
+  model_id?: string;
+  enabled?: boolean;
+  rate?: string;
+  group_id?: string;
+}
+
+export interface TtsConfig {
+  provider: string;
+  auto: string;
+  mode: string;
+  max_length: number;
+  timeout_ms: number;
+  openai: TtsProviderConfig;
+  elevenlabs: TtsProviderConfig;
+  edge: TtsProviderConfig;
+  minimax: TtsProviderConfig;
+}
+
+const DEFAULT_TTS: TtsConfig = {
+  provider: "",
+  auto: "off",
+  mode: "final",
+  max_length: 1500,
+  timeout_ms: 30000,
+  openai: {},
+  elevenlabs: {},
+  edge: {},
+  minimax: {},
+};
+
+export function useTtsConfig() {
+  const ws = useWs();
+  const queryClient = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: tts = DEFAULT_TTS, isLoading: loading } = useQuery({
+    queryKey: queryKeys.tts.all,
+    queryFn: async () => {
+      if (!ws.isConnected) return DEFAULT_TTS;
+      const res = await ws.call<{ config: Record<string, unknown> }>(Methods.CONFIG_GET);
+      const ttsConfig = (res.config?.tts as TtsConfig) ?? DEFAULT_TTS;
+      return { ...DEFAULT_TTS, ...ttsConfig };
+    },
+  });
+
+  const invalidate = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.tts.all }),
+    [queryClient],
+  );
+
+  const save = useCallback(
+    async (updates: Partial<TtsConfig>) => {
+      setSaving(true);
+      setError(null);
+      try {
+        await ws.call(Methods.CONFIG_PATCH, { tts: updates });
+        await invalidate();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to save TTS config";
+        setError(msg);
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [ws, invalidate],
+  );
+
+  return { tts, loading, saving, error, refresh: invalidate, save };
+}

@@ -55,9 +55,12 @@ function buildVolumeMounts(group: RegisteredGroup, isMain: boolean): VolumeMount
   if (!isValidGroupFolder(group.folder)) {
     throw new Error(`Invalid group folder: ${group.folder}`);
   }
-  
+
   const mounts: VolumeMount[] = [];
-  const projectRoot = process.cwd();
+  // When running inside a Docker container, process.cwd() returns the container path (e.g. /app).
+  // Agent containers are spawned via the host Docker socket, so bind mount paths must point to
+  // the actual host filesystem. HOST_PROJECT_ROOT overrides this when set (docker-compose.sandbox.yml).
+  const projectRoot = process.env.HOST_PROJECT_ROOT || process.cwd();
   const groupDir = resolveGroupFolderPath(group.folder);
 
   if (isMain) {
