@@ -24,15 +24,20 @@ FROM oven/bun:1-slim AS runtime
 
 ARG ENABLE_SANDBOX=false
 
-# Install docker-cli when sandbox mode is enabled (needed to spawn agent containers)
+# Install base tools + docker-ce-cli when sandbox mode is enabled
+# docker.io on Debian arm64 lacks the CLI binary; use Docker's official repo instead
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget curl && \
     if [ "$ENABLE_SANDBOX" = "true" ]; then \
-        apt-get install -y --no-install-recommends docker.io; \
+        apt-get install -y --no-install-recommends gnupg lsb-release && \
+        curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker.gpg && \
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
+            > /etc/apt/sources.list.d/docker.list && \
+        apt-get update && apt-get install -y --no-install-recommends docker-ce-cli; \
     fi && \
     rm -rf /var/lib/apt/lists/*
 
-# Non-root user
-RUN useradd -m -u 1000 -s /bin/bash jimmyclaw
+# Non-root user (bun:1-slim already has uid 1000, use next available)
+RUN useradd -m -s /bin/bash jimmyclaw
 WORKDIR /app
 
 # Copy built artifacts and runtime-needed source

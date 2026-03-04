@@ -24,10 +24,10 @@ export const POLL_INTERVAL = 2000;
 export const SCHEDULER_POLL_INTERVAL = 60000;
 
 // Absolute paths needed for container mounts.
-// When running inside Docker, process.cwd() returns the container path (/app).
-// HOST_PROJECT_ROOT overrides this so agent container bind mounts point to the
-// actual host filesystem (set via docker-compose.sandbox.yml).
-const PROJECT_ROOT = process.env.HOST_PROJECT_ROOT || process.cwd();
+// The daemon always uses its own working directory (process.cwd() = /app in Docker).
+// HOST_PROJECT_ROOT is used only in container-runner.ts to translate internal paths
+// to host filesystem paths when spawning agent containers via the Docker socket.
+const PROJECT_ROOT = process.cwd();
 const HOME_DIR = process.env.HOME || os.homedir();
 
 // Mount security: allowlist stored OUTSIDE project root, never mounted into containers

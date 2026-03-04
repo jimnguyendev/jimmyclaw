@@ -57,8 +57,17 @@ function buildVolumeMounts(group: RegisteredGroup, isMain: boolean): VolumeMount
   }
 
   const mounts: VolumeMount[] = [];
-  const projectRoot = process.cwd(); // equals HOST_PROJECT_ROOT when set (see config.ts)
-  const groupDir = resolveGroupFolderPath(group.folder);
+  // When running inside Docker, the daemon's paths are /app/groups/..., /app/data/...
+  // But agent containers are spawned via the host Docker socket, so bind mount hostPaths
+  // must point to the actual host filesystem. HOST_PROJECT_ROOT translates:
+  //   /app/groups/main  →  HOST_PROJECT_ROOT/groups/main  (on host)
+  const internalRoot = process.cwd();
+  const hostRoot = process.env.HOST_PROJECT_ROOT || internalRoot;
+  const toHostPath = (p: string) =>
+    hostRoot !== internalRoot ? p.replace(internalRoot, hostRoot) : p;
+  const projectRoot = hostRoot;
+  const groupDir = toHostPath(resolveGroupFolderPath(group.folder));
+
 
   if (isMain) {
     // Main gets the project root read-only. Writable paths the agent needs
@@ -91,7 +100,7 @@ function buildVolumeMounts(group: RegisteredGroup, isMain: boolean): VolumeMount
     const globalDir = path.join(GROUPS_DIR, 'global');
     if (fs.existsSync(globalDir)) {
       mounts.push({
-        hostPath: globalDir,
+        hostPath: toHostPath(globalDir),
         containerPath: '/workspace/global',
         readonly: true,
       });
@@ -108,7 +117,7 @@ function buildVolumeMounts(group: RegisteredGroup, isMain: boolean): VolumeMount
   fs.mkdirSync(sharedDocsDir, { recursive: true });
   fs.mkdirSync(sharedCodeDir, { recursive: true });
   mounts.push({
-    hostPath: groupWorkspaceDir,
+    hostPath: toHostPath(groupWorkspaceDir),
     containerPath: '/workspace/shared',
     readonly: false,
   });
@@ -137,9 +146,12 @@ function buildVolumeMounts(group: RegisteredGroup, isMain: boolean): VolumeMount
     const settings: Record<string, unknown> = { env: settingsEnv };
     const mcpServers: Record<string, unknown> = {};
 
-    // When Z.ai is configured, set API base URL and MCP servers
+    // When Z.ai is configured, set API base URL and MCP servers.
+    // Claude Code uses ANTHROPIC_AUTH_TOKEN (not ANTHROPIC_API_KEY) for third-party providers.
     if (zAiKey) {
+      settingsEnv.ANTHROPIC_AUTH_TOKEN = zAiKey;
       settingsEnv.ANTHROPIC_BASE_URL = 'https://api.z.ai/api/anthropic';
+      settingsEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1';
       settingsEnv.API_TIMEOUT_MS = '3000000';
 
       mcpServers['zai-mcp-server'] = {
@@ -219,7 +231,7 @@ function buildVolumeMounts(group: RegisteredGroup, isMain: boolean): VolumeMount
     }
   }
   mounts.push({
-    hostPath: groupSessionsDir,
+    hostPath: toHostPath(groupSessionsDir),
     containerPath: '/home/node/.claude',
     readonly: false,
   });
@@ -231,7 +243,7 @@ function buildVolumeMounts(group: RegisteredGroup, isMain: boolean): VolumeMount
   fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
   mounts.push({
-    hostPath: groupIpcDir,
+    hostPath: toHostPath(groupIpcDir),
     containerPath: '/workspace/ipc',
     readonly: false,
   });
@@ -245,7 +257,7 @@ function buildVolumeMounts(group: RegisteredGroup, isMain: boolean): VolumeMount
     fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
   }
   mounts.push({
-    hostPath: groupAgentRunnerDir,
+    hostPath: toHostPath(groupAgentRunnerDir),
     containerPath: '/app/src',
     readonly: false,
   });
@@ -268,7 +280,7 @@ function buildVolumeMounts(group: RegisteredGroup, isMain: boolean): VolumeMount
  * Secrets are never written to disk or mounted as files.
  */
 function readSecrets(): Record<string, string> {
-  return readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'Z_AI_API_KEY']);
+  return readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'Z_AI_API_KEY']);
 }
 
 function buildContainerArgs(mounts: VolumeMount[], containerName: string): string[] {

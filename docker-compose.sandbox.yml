@@ -29,4 +29,4 @@ services:
       - NET_BIND_SERVICE
     security_opt: []
     group_add:
-      - ${DOCKER_GID:-999}
+      - ${DOCKER_GID:-0}
