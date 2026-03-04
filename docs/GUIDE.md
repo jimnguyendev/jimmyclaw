@@ -1,29 +1,30 @@
 # JimmyClaw — Hướng Dẫn Sử Dụng
 
-> Phiên bản: 1.1+ | Cập nhật: 2026-03
+> Phiên bản: 1.2+ | Cập nhật: 2026-03
 
 ---
 
 ## Mục Lục
 
 1. [Tổng quan hệ thống](#1-tổng-quan-hệ-thống)
-2. [Yêu cầu cài đặt](#2-yêu-cầu-cài-đặt)
-3. [Cài đặt nhanh](#3-cài-đặt-nhanh)
-4. [Cấu hình cơ bản](#4-cấu-hình-cơ-bản)
-5. [CLI Dashboard](#5-cli-dashboard)
-6. [Agent Swarm — Team AI](#6-agent-swarm--team-ai)
-7. [Kênh giao tiếp nhóm (Discord / Telegram)](#7-kênh-giao-tiếp-nhóm-discord--telegram)
-8. [Use Cases triển khai](#8-use-cases-triển-khai)
-9. [Chạy multi-instance trên nhiều VPS](#9-chạy-multi-instance-trên-nhiều-vps)
-10. [Troubleshooting](#10-troubleshooting)
+2. [API Keys cần thiết](#2-api-keys-cần-thiết)
+3. [Cài đặt — macOS / Linux (native)](#3-cài-đặt--macos--linux-native)
+4. [Cài đặt — VPS với Docker](#4-cài-đặt--vps-với-docker)
+5. [Cấu hình cơ bản](#5-cấu-hình-cơ-bản)
+6. [CLI Dashboard](#6-cli-dashboard)
+7. [Agent Swarm — Team AI](#7-agent-swarm--team-ai)
+8. [Kênh giao tiếp nhóm (Discord / Telegram)](#8-kênh-giao-tiếp-nhóm-discord--telegram)
+9. [Multi-container — Scale agents](#9-multi-container--scale-agents)
+10. [Use Cases](#10-use-cases)
+11. [Troubleshooting](#11-troubleshooting)
 
 ---
 
 ## 1. Tổng Quan Hệ Thống
 
-JimmyClaw là một AI assistant cá nhân chạy trên một tiến trình Bun duy nhất. Các AI agent chạy bên trong container Linux được cô lập hoàn toàn (Apple Container trên macOS, Docker trên Linux).
+JimmyClaw là một AI assistant cá nhân chạy trên một tiến trình Bun duy nhất. Các AI agent chạy bên trong container Linux được cô lập hoàn toàn (Apple Container trên macOS, Docker trên Linux/VPS).
 
-### Kiến trúc tóm tắt
+### Kiến trúc
 
 ```
 Người dùng (WhatsApp / Telegram / Discord)
@@ -46,8 +47,8 @@ Người dùng (WhatsApp / Telegram / Discord)
  │  SQLite ── Task Queue ── RAG Memory │
  └─────────────────────────────────────┘
         │
-        ▼
-  Container (isolated filesystem)
+        ▼ docker run / docker exec
+  jimmyclaw-agent container
   → Claude Agent SDK
   → Web access, file I/O, Bash
 ```
@@ -65,54 +66,51 @@ Người dùng (WhatsApp / Telegram / Discord)
 
 ---
 
-## 2. Yêu Cầu Cài Đặt
-
-### Bắt buộc
-
-| Phần mềm | Phiên bản | Link |
-|---------|----------|------|
-| **Bun** | 1.2+ | https://bun.sh |
-| **Claude Code** | Latest | `npm install -g @anthropic-ai/claude-code` |
-| **Container runtime** | — | Apple Container (macOS) hoặc Docker |
-
-### Container Runtime
-
-**macOS (khuyến nghị):**
-```bash
-# Apple Container — nhẹ hơn Docker, native trên Apple Silicon
-brew install --cask apple/container/container
-```
-
-**macOS / Linux (Docker):**
-```bash
-# Docker Desktop
-# Download tại: https://www.docker.com/products/docker-desktop
-```
-
-**Linux (Docker Engine):**
-```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-```
-
-### API Keys cần thiết
+## 2. API Keys Cần Thiết
 
 | Key | Bắt buộc | Mục đích |
 |-----|---------|---------|
 | `ANTHROPIC_API_KEY` | Có* | Claude models |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Có* | Claude subscription |
-| `Z_AI_API_KEY` | Không | Z.ai / GLM models (rẻ hơn) |
+| `Z_AI_API_KEY` | Không | Z.ai / GLM models (rẻ hơn cho worker agents) |
 | `OPENROUTER_API_KEY` | Không | RAG embeddings |
 
 *Cần ít nhất một trong hai Anthropic keys.
 
-> **Tiết kiệm chi phí:** Sử dụng `Z_AI_API_KEY` với các model GLM (glm-4.7-flash, glm-5) cho worker agents. Chỉ dùng Claude cho leader và các task quan trọng.
+> **Tiết kiệm chi phí:** Dùng `Z_AI_API_KEY` với các model GLM (glm-4.7-flash, glm-5) cho worker agents. Chỉ dùng Claude cho leader và các task quan trọng.
 
 ---
 
-## 3. Cài Đặt Nhanh
+## 3. Cài Đặt — macOS / Linux (native)
 
-### Bước 1: Clone và mở Claude Code
+Dành cho máy cá nhân, development, hoặc khi không muốn dùng Docker.
+
+### Yêu cầu
+
+| Phần mềm | Phiên bản |
+|---------|----------|
+| **Bun** | 1.2+ |
+| **Claude Code** | Latest |
+| **Docker** (macOS) hoặc **Apple Container** | — |
+
+```bash
+# Bun
+curl -fsSL https://bun.sh/install | bash
+
+# Claude Code
+npm install -g @anthropic-ai/claude-code
+
+# Container runtime — chọn một:
+
+# macOS — Apple Container (nhẹ hơn, native Apple Silicon)
+brew install --cask apple/container/container
+
+# macOS / Linux — Docker
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+```
+
+### Cài đặt
 
 ```bash
 git clone https://github.com/qwibitai/JimmyClaw.git
@@ -120,35 +118,34 @@ cd JimmyClaw
 claude
 ```
 
-### Bước 2: Chạy setup wizard
+Trong Claude Code, chạy setup wizard:
 
-Trong Claude Code, gõ:
 ```
 /setup
 ```
 
-Claude sẽ tự động:
-- Cài dependencies (`bun install`)
-- Tạo file `.env` với các API keys
-- Authenticate WhatsApp/Telegram
-- Build container image
+Wizard tự động:
+- Chạy `bun install`
+- Tạo `.env` với API keys
+- Authenticate WhatsApp / Telegram
+- Build agent container image
 - Đăng ký daemon service (launchd trên macOS, systemd trên Linux)
 
-### Bước 3: Thêm channel (nếu cần)
+### Thêm channel (tuỳ chọn)
 
 ```
 /add-telegram      # Thêm Telegram
-/add-gmail         # Thêm Gmail integration
+/add-gmail         # Thêm Gmail
 ```
 
-### Bước 4: Khởi động daemon
+### Khởi động
 
 ```bash
 jimmyclaw start
 jimmyclaw status
 ```
 
-Hoặc qua service:
+Qua service manager:
 ```bash
 # macOS
 launchctl kickstart -k gui/$(id -u)/com.jimmyclaw
@@ -159,7 +156,102 @@ systemctl --user start jimmyclaw
 
 ---
 
-## 4. Cấu Hình Cơ Bản
+## 4. Cài Đặt — VPS với Docker
+
+Dành cho VPS Linux. Chỉ cần Docker — không cần cài Bun hay Claude Code trên host.
+
+### Yêu cầu
+
+- Docker Engine 24+
+- Docker Compose v2
+
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+### Bước 1: Clone repo
+
+```bash
+git clone https://github.com/qwibitai/JimmyClaw.git /opt/jimmyclaw
+cd /opt/jimmyclaw
+```
+
+### Bước 2: Chuẩn bị thư mục và `.env`
+
+```bash
+bash docker-prepare.sh /opt/jimmyclaw
+```
+
+Script tự tạo:
+- `groups/`, `store/`, `data/`, `config/` — thư mục dữ liệu bind-mount ra host
+- `.env` từ `.env.example`
+- Tự detect `DOCKER_GID` và ghi vào `.env`
+
+Sau đó điền API keys:
+
+```bash
+nano /opt/jimmyclaw/.env
+```
+
+```env
+ANTHROPIC_API_KEY=sk-ant-...
+# Hoặc:
+CLAUDE_CODE_OAUTH_TOKEN=...
+
+# Tuỳ chọn — rẻ hơn cho worker agents:
+Z_AI_API_KEY=...
+
+# Channel
+TELEGRAM_BOT_TOKEN=...
+```
+
+### Bước 3: Build agent container image
+
+Agent container (`jimmyclaw-agent`) là sandbox chạy Claude Agent SDK bên trong. Cần build một lần:
+
+```bash
+docker build -t jimmyclaw-agent:latest -f container/Dockerfile container/
+```
+
+### Bước 4: Start
+
+```bash
+docker compose -f docker-compose.yml \
+  -f docker-compose.standalone.yml \
+  -f docker-compose.sandbox.yml \
+  up -d --build
+```
+
+Kiểm tra:
+```bash
+docker compose logs -f jimmyclaw
+```
+
+### Cập nhật phiên bản mới
+
+```bash
+git pull
+docker compose -f docker-compose.yml \
+  -f docker-compose.standalone.yml \
+  -f docker-compose.sandbox.yml \
+  up -d --build
+```
+
+### Docker Compose overlays
+
+| File | Mục đích |
+|------|---------|
+| `docker-compose.yml` | Base — service definition, env vars (bắt buộc) |
+| `docker-compose.standalone.yml` | Bind mounts ra host disk — dễ edit `groups/`, backup |
+| `docker-compose.sandbox.yml` | Mount Docker socket để spawn agent containers |
+
+> **Lưu ý bảo mật:** `docker-compose.sandbox.yml` mount `/var/run/docker.sock` vào daemon container, cho phép nó tạo/xóa containers trên host. Chỉ dùng trên VPS do bạn kiểm soát.
+
+---
+
+## 5. Cấu Hình Cơ Bản
 
 ### File cấu hình chính: `config/agent-swarm.json`
 
@@ -178,6 +270,18 @@ systemctl --user start jimmyclaw
       "role": "researcher",
       "model": "glm-4.7-flash",
       "timeoutMs": 120000
+    },
+    {
+      "id": "mike",
+      "role": "coder",
+      "model": "glm-4.7-flash",
+      "timeoutMs": 120000
+    },
+    {
+      "id": "emma",
+      "role": "reviewer",
+      "model": "glm-4.7-flash",
+      "timeoutMs": 120000
     }
   ],
   "teamChannel": {
@@ -192,237 +296,119 @@ systemctl --user start jimmyclaw
 }
 ```
 
-### Biến môi trường (`.env`)
-
-```env
-ANTHROPIC_API_KEY=sk-ant-...
-Z_AI_API_KEY=your-zai-key
-
-# Team channel — Discord
-DISCORD_BOT_TOKEN_ANDY=Bot_token_for_andy
-DISCORD_BOT_TOKEN_SARAH=Bot_token_for_sarah
-DISCORD_BOT_TOKEN_MIKE=Bot_token_for_mike
-DISCORD_BOT_TOKEN_EMMA=Bot_token_for_emma
-
-# Hoặc Telegram
-TELEGRAM_BOT_TOKEN_ANDY=bot_token
-TELEGRAM_BOT_TOKEN_SARAH=bot_token
-
-# Multi-instance (nếu chạy nhiều VPS)
-INSTANCE_ID=vps-01
-INSTANCE_AGENTS=andy,sarah
-```
-
 ### Thay đổi cấu hình qua CLI
 
 ```bash
-# Xem config hiện tại
-jimmyclaw config
-
-# Sửa một field
 jimmyclaw config set maxParallelTasks 6
-
-# Reload config (không cần restart daemon)
-jimmyclaw config reload
-
-# Reset về mặc định
-jimmyclaw config reset
+jimmyclaw config reload    # Reload không cần restart
+jimmyclaw config reset     # Reset về mặc định
 ```
 
 ---
 
-## 5. CLI Dashboard
+## 6. CLI Dashboard
 
-`jimmyclaw` là công cụ quản lý daemon từ terminal.
+### Cài đặt CLI (native mode)
 
-### Cài đặt CLI
-
-CLI được build tự động cùng project:
 ```bash
-npm run build
-# Binary: dist/cli/index.js
-# Hoặc dùng trực tiếp: bun src/cli/index.ts
-```
-
-Thêm vào PATH:
-```bash
+bun run build
 echo 'alias jimmyclaw="bun /path/to/jimmyclaw/src/cli/index.ts"' >> ~/.zshrc
 ```
 
-### Các lệnh chính
-
-#### Daemon management
+### Daemon management
 
 ```bash
-jimmyclaw start              # Start daemon
-jimmyclaw stop               # Stop daemon
-jimmyclaw restart            # Restart daemon
-jimmyclaw status             # Xem trạng thái tổng quan
-jimmyclaw status --json      # Output JSON (cho scripting)
+jimmyclaw start
+jimmyclaw stop
+jimmyclaw restart
+jimmyclaw status
+jimmyclaw status --json    # JSON output cho scripting
 ```
 
-Output ví dụ:
-```
-● JimmyClaw running
-  Uptime: 2h 34m
-  Memory: 128 MB / 512 MB
-  Agents: 4
-  Tasks: 0 pending, 1 processing
-  Cost today: $0.023
-```
-
-#### Agent management
+### Agent management
 
 ```bash
-# Xem danh sách agents
 jimmyclaw agent list
 
-# Thêm agent mới (interactive)
-jimmyclaw agent add
 jimmyclaw agent add --id lisa --role writer --model glm-4.7-flash
-
-# Đổi model
 jimmyclaw agent model sarah glm-5
-
-# Sửa system prompt
-jimmyclaw agent prompt mike
-
-# Đổi tên agent
+jimmyclaw agent prompt mike        # Sửa system prompt
 jimmyclaw agent rename andy boss
-
-# Xóa agent
 jimmyclaw agent remove lisa
 ```
 
-#### Task management
+### Tasks
 
 ```bash
-# Xem tất cả tasks
 jimmyclaw tasks
-
-# Xem chi tiết một task
 jimmyclaw task <task-id>
 ```
 
-#### Logs
+### Logs
 
 ```bash
-# Xem 50 dòng log gần nhất
 jimmyclaw logs
-
-# Xem 200 dòng
 jimmyclaw logs --lines 200
-
-# Filter theo agent
 jimmyclaw logs --agent sarah
-
-# Filter theo level
 jimmyclaw logs --level error
-
-# Follow realtime (như tail -f)
-jimmyclaw logs --follow
-jimmyclaw logs -f
+jimmyclaw logs -f              # Realtime follow
 ```
 
-#### Team channel
+### Team channel
 
 ```bash
-# Xem cấu hình channel hiện tại
 jimmyclaw channel
-
-# Đổi sang Discord
 jimmyclaw channel set discord --channel-id 123456789
-
-# Đổi sang Telegram
 jimmyclaw channel set telegram --channel-id -100123456789
-
-# Bật/tắt channel
 jimmyclaw channel enable
 jimmyclaw channel disable
 ```
 
-### TUI (Terminal UI)
-
-Chạy `jimmyclaw` không có argument để mở TUI dashboard:
+### TUI Dashboard
 
 ```bash
-jimmyclaw
+jimmyclaw    # Không có argument → mở TUI
 ```
 
-TUI hiển thị:
-- Status panel: uptime, memory, cost
-- Agents panel: danh sách agents và trạng thái (idle/busy)
-- Tasks panel: tasks đang chạy và gần đây
-- Logs panel: live log stream
+TUI hiển thị: uptime, memory, cost, danh sách agents (idle/busy), tasks đang chạy, live logs.
 
 ---
 
-## 6. Agent Swarm — Team AI
+## 7. Agent Swarm — Team AI
 
 ### Cách hoạt động
 
 Khi người dùng gửi yêu cầu phức tạp, **Andy (leader)** sẽ:
 
-1. **Phân tích độ phức tạp** — task > 50 từ hoặc có từ "and/then/also" → dùng TaskPlanner
-2. **LLM tạo plan** — Andy gọi LLM để chia nhỏ thành subtasks với dependencies
-3. **Dispatch parallel** — các subtasks không phụ thuộc nhau chạy song song
-4. **Thu kết quả** — khi tất cả subtasks xong, Andy tổng hợp và trả lời người dùng
-
-### Luồng xử lý task phức tạp
+1. **Phân tích** — task > 50 từ hoặc có từ "and/then/also" → dùng TaskPlanner
+2. **LLM plan** — chia nhỏ thành subtasks với dependencies
+3. **Dispatch parallel** — subtasks không phụ thuộc nhau chạy song song
+4. **Tổng hợp** — khi tất cả xong, Andy synthesize và trả lời user
 
 ```
 User: "Research Node.js best practices rồi viết một REST API template"
                     │
-                    ▼
               Andy (leader)
               classifies → complex task
                     │
-                    ▼
            TaskPlanner.plan()
-          ┌─────────────────────┐
-          │ s1: sarah/researcher │  deps: []
-          │ s2: mike/coder      │  deps: [s1]
-          └─────────────────────┘
+          ┌──────────────────────┐
+          │ s1: sarah/researcher  │  deps: []
+          │ s2: mike/coder        │  deps: [s1]
+          └──────────────────────┘
                     │
           ┌─────────▼──────────┐
-          │  Wave 1: s1 (sarah) │  ← parallel nếu có nhiều no-dep tasks
+          │  Wave 1: s1 (sarah) │
           └─────────┬──────────┘
-                    │ s1 done
+                    │ s1 done → kết quả pass vào context
           ┌─────────▼──────────┐
-          │  Wave 2: s2 (mike)  │  ← s1 result được pass vào context
+          │  Wave 2: s2 (mike)  │
           └─────────┬──────────┘
-                    │ s2 done
-                    ▼
+                    │
            Andy synthesizes → trả lời user
 ```
 
-### Cấu hình roles
-
-Mỗi role được định nghĩa trong `config/agent-swarm.json`:
-
-```json
-{
-  "roles": [
-    {
-      "id": "devops",
-      "description": "Handles deployment, CI/CD, infrastructure",
-      "defaultPrompt": "You are a DevOps engineer. Handle deployment and infrastructure tasks.",
-      "canDelegate": false,
-      "keywords": ["deploy", "docker", "kubernetes", "ci/cd", "nginx", "infrastructure"]
-    }
-  ]
-}
-```
-
-Sau đó thêm agent với role mới:
-```bash
-jimmyclaw agent add --id ops-bot --role devops --model glm-4.7-flash
-jimmyclaw config reload
-```
-
 ### Task classification tự động
-
-Leader tự động phân loại task dựa trên keywords và giao cho đúng agent:
 
 | Từ khóa trong tin nhắn | Role được chọn |
 |----------------------|----------------|
@@ -432,37 +418,53 @@ Leader tự động phân loại task dựa trên keywords và giao cho đúng a
 | write, document, guide, tài liệu | writer |
 | organize, plan, coordinate | leader |
 
+### Thêm agent / role mới
+
+```json
+// config/agent-swarm.json — thêm vào roles[]
+{
+  "id": "devops",
+  "description": "Handles deployment, CI/CD, infrastructure",
+  "defaultPrompt": "You are a DevOps engineer.",
+  "keywords": ["deploy", "docker", "kubernetes", "nginx"]
+}
+```
+
+```bash
+jimmyclaw agent add --id ops-bot --role devops --model glm-4.7-flash
+jimmyclaw config reload
+```
+
 ---
 
-## 7. Kênh Giao Tiếp Nhóm (Discord / Telegram)
+## 8. Kênh Giao Tiếp Nhóm (Discord / Telegram)
 
-Tính năng này cho phép mỗi agent có một bot riêng, giao tiếp trong một channel duy nhất — giống như một team thực tế trên Slack.
+Mỗi agent có bot riêng, giao tiếp trong một channel — giống team Slack thực tế.
 
 ### Setup Discord
 
-**Bước 1: Tạo Discord Application và Bot cho từng agent**
+**1. Tạo bot cho từng agent**
 
 1. Vào [discord.com/developers/applications](https://discord.com/developers/applications)
 2. Tạo application mới cho mỗi agent (Andy, Sarah, Mike, Emma)
-3. Trong mỗi app: Bot → Reset Token → copy token
+3. Bot → Reset Token → copy token
 4. Bật: `MESSAGE CONTENT INTENT`, `SERVER MEMBERS INTENT`, `PRESENCE INTENT`
-5. Mời tất cả bots vào server của bạn
+5. Mời tất cả bots vào server
 
-**Bước 2: Cấu hình `.env`**
+**2. Điền `.env`**
 
 ```env
-DISCORD_BOT_TOKEN_ANDY=MTxxxxxxx.Gxxxxx.xxxxxxxx
-DISCORD_BOT_TOKEN_SARAH=MTxxxxxxx.Gxxxxx.xxxxxxxx
-DISCORD_BOT_TOKEN_MIKE=MTxxxxxxx.Gxxxxx.xxxxxxxx
-DISCORD_BOT_TOKEN_EMMA=MTxxxxxxx.Gxxxxx.xxxxxxxx
+DISCORD_BOT_TOKEN_ANDY=MTxxxxxxx...
+DISCORD_BOT_TOKEN_SARAH=MTxxxxxxx...
+DISCORD_BOT_TOKEN_MIKE=MTxxxxxxx...
+DISCORD_BOT_TOKEN_EMMA=MTxxxxxxx...
 ```
 
-**Bước 3: Lấy Channel ID**
+**3. Lấy Channel ID**
 
-Trong Discord: Settings → Advanced → Developer Mode ON.
-Chuột phải vào channel → Copy Channel ID.
+Discord: Settings → Advanced → Developer Mode ON → chuột phải channel → Copy Channel ID.
 
-**Bước 4: Kích hoạt**
+**4. Kích hoạt**
 
 ```bash
 jimmyclaw channel set discord --channel-id YOUR_CHANNEL_ID
@@ -470,20 +472,17 @@ jimmyclaw channel enable
 jimmyclaw config reload
 ```
 
-Hoặc thông qua `/add-discord` skill trong Claude Code.
+Hoặc dùng skill trong Claude Code: `/add-discord`
 
 ### Setup Telegram Bot Pool
 
-```bash
-# Trong Claude Code:
+```
 /add-telegram-swarm
 ```
 
-Skill sẽ hướng dẫn tạo bot pool cho từng agent qua @BotFather.
+Skill hướng dẫn tạo bot pool cho từng agent qua @BotFather.
 
 ### Giao tiếp trong channel
-
-Sau khi setup, agents sẽ xuất hiện trong channel với bot riêng:
 
 ```
 [Andy]   @sarah Research Node.js best practices
@@ -495,348 +494,195 @@ Sau khi setup, agents sẽ xuất hiện trong channel với bot riêng:
 [Andy]   Tổng hợp: [final answer to user]
 ```
 
-### Progress indicators
+---
 
-Agents tự động post status updates:
-- `[thinking]` — đang xử lý yêu cầu
-- `[working on: ...]` — đang thực hiện task cụ thể
-- `[done]` — hoàn thành
+## 9. Multi-container — Scale Agents
 
-### Clarification protocol
+Chạy nhiều JimmyClaw instances trên cùng một VPS (hoặc nhiều VPS) — mỗi instance chạy một tập agents khác nhau, tất cả giao tiếp qua cùng Discord/Telegram channel.
 
-Khi agent cần hỏi trước khi làm, nó có thể post:
+### Kiến trúc
+
 ```
-[Mike] 🤔 **Mike needs clarification**:
-       Should I use JWT or sessions for auth?
-       Please reply to help Mike proceed.
+Discord/Telegram Channel (kênh giao tiếp chung)
+              │
+     ┌────────┴────────┐
+     │                 │
+Instance leader     Instance workers
+INSTANCE_ID=leader  INSTANCE_ID=workers
+Andy + Emma         Sarah + Mike
 ```
 
-Người dùng reply trong channel → agent tiếp tục với câu trả lời.
+### Cấu hình
+
+**Instance 1 — leader (`.env`):**
+
+```env
+INSTANCE_ID=leader
+INSTANCE_AGENTS=andy,emma
+DISCORD_BOT_TOKEN_ANDY=...
+DISCORD_BOT_TOKEN_EMMA=...
+TEAM_CHANNEL_PLATFORM=discord
+DISCORD_TEAM_CHANNEL_ID=123456789
+```
+
+**Instance 2 — workers (`.env.workers`):**
+
+```env
+INSTANCE_ID=workers
+INSTANCE_AGENTS=sarah,mike
+DISCORD_BOT_TOKEN_SARAH=...
+DISCORD_BOT_TOKEN_MIKE=...
+TEAM_CHANNEL_PLATFORM=discord
+DISCORD_TEAM_CHANNEL_ID=123456789
+```
+
+### Deploy trên cùng VPS
+
+```bash
+# Instance leader
+INSTANCE_ID=leader INSTANCE_AGENTS=andy,emma \
+docker compose -f docker-compose.yml \
+  -f docker-compose.standalone.yml \
+  -f docker-compose.sandbox.yml \
+  -p jimmyclaw-leader up -d
+
+# Instance workers (dùng cùng groups/ và store/)
+INSTANCE_ID=workers INSTANCE_AGENTS=sarah,mike \
+docker compose -f docker-compose.yml \
+  -f docker-compose.standalone.yml \
+  -f docker-compose.sandbox.yml \
+  -p jimmyclaw-workers up -d
+```
+
+### Deploy trên nhiều VPS
+
+Trên mỗi VPS, clone repo và chạy `docker-prepare.sh`, sau đó start với `INSTANCE_ID` và `INSTANCE_AGENTS` tương ứng. Cả hai VPS phải trỏ vào cùng Discord/Telegram channel.
+
+Andy gửi `[jimmyclaw:assign]` message → Sarah/Mike trên instance khác nhận → xử lý → post kết quả → Andy nhận.
 
 ---
 
-## 8. Use Cases Triển Khai
+## 10. Use Cases
 
-### Use Case 1: Personal AI Assistant (cơ bản)
+### Personal AI Assistant
 
-**Tình huống:** Một developer muốn AI trả lời câu hỏi qua WhatsApp.
+Cấu hình tối thiểu: 1 agent (Andy), không cần team channel.
 
-**Cài đặt:**
 ```bash
-git clone ... && cd JimmyClaw
-claude
-/setup   # Chọn WhatsApp
+git clone ... && cd JimmyClaw && claude
+/setup   # chọn WhatsApp hoặc Telegram
 ```
 
-**Sử dụng:**
 ```
-@Andy tìm tất cả customer có doanh thu > $10k trong tháng này
 @Andy tóm tắt Hacker News hôm nay
 @Andy nhắc tôi review code lúc 5pm hàng ngày
 ```
 
-**Cấu hình tối thiểu:** 1 agent (Andy), không cần team channel.
-
 ---
 
-### Use Case 2: Developer Workflow Assistant
+### Developer Workflow
 
-**Tình huống:** Developer muốn AI hỗ trợ code review, research, viết docs.
+4 agents mặc định: Andy (leader), Sarah (research), Mike (code), Emma (review).
 
-**Cài đặt:**
-```bash
-# Setup basic + thêm Discord channel
-jimmyclaw channel set discord --channel-id CHANNEL_ID
-jimmyclaw channel enable
-
-# Agents: Andy (leader), Sarah (research), Mike (code), Emma (review)
-# Đã có sẵn trong config mặc định
-```
-
-**Workflow mẫu:**
-
-Gửi từ WhatsApp/Telegram:
 ```
 @Andy build một REST API cho user management với tests
 ```
 
-Trong Discord channel, team làm việc:
 ```
-[Andy]  📋 Plan:
-        s1 → Sarah: Research REST API best practices
-        s2 → Mike: Implement endpoints (depends: s1)
-        s3 → Emma: Review code (depends: s2)
-        s4 → Mike: Write tests (depends: s2)
-[Sarah] 🤔 [thinking...]
+[Andy]  s1 → Sarah: Research best practices
+        s2 → Mike: Implement (deps: s1)
+        s3 → Emma: Review (deps: s2)
 [Sarah] ✅ Best practices: ...
-[Mike]  🔨 [working on: Implement endpoints...]
 [Mike]  ✅ Code: ...
-[Emma]  🔍 [working on: Review code...]
-[Emma]  ✅ Review: Found 2 issues...
-[Mike]  📝 Tests: ...
-[Andy]  ✅ Xong! Đây là REST API template với tests...
+[Emma]  ✅ Review: 2 issues found...
+[Andy]  ✅ Xong!
 ```
 
 ---
 
-### Use Case 3: Team Nội Bộ — Knowledge Base
+### Team Knowledge Base
 
-**Tình huống:** Một team nhỏ (5-10 người) muốn dùng chung AI agent với memory riêng theo group chat.
+Mỗi group chat → context riêng biệt với `groups/{name}/CLAUDE.md` và `groups/{name}/MEMORY.md`.
 
-**Cài đặt:**
-- Mỗi group WhatsApp/Telegram → một context riêng biệt
-- Mỗi group có `groups/{name}/MEMORY.md` và `groups/{name}/CLAUDE.md` riêng
-
-**Cấu hình `groups/engineering/CLAUDE.md`:**
 ```markdown
-# Engineering Team Context
-
-You help the engineering team. You have access to:
-- Our Jira project (via knowledge/jira.md)
-- Code standards (via knowledge/coding-standards.md)
-- Team contacts (via knowledge/team.md)
-
-Always check MEMORY.md for recent decisions before answering.
+# groups/engineering/CLAUDE.md
+You help the engineering team. Check MEMORY.md for recent decisions.
 ```
 
-**Sử dụng:**
 ```
 @Andy ai đang on-call tuần này?
-@Andy tìm tất cả các bug liên quan đến payment module
 @Andy viết PR description cho branch feature/user-auth
 ```
 
 ---
 
-### Use Case 4: Content Creator Workflow
+### Scheduled Automation
 
-**Tình huống:** Blogger/YouTuber muốn AI giúp research + viết + review nội dung.
-
-**Cài đặt:** Thêm writer role:
-
-```json
-// config/agent-swarm.json — thêm vào workers[]
-{
-  "id": "lisa",
-  "role": "writer",
-  "model": "glm-4.7-flash",
-  "systemPrompt": "You are Lisa, a content writer. Create engaging, SEO-friendly content with clear structure.",
-  "timeoutMs": 180000
-}
-```
-
-```bash
-jimmyclaw agent add --id lisa --role writer --model glm-4.7-flash
-jimmyclaw config reload
-```
-
-**Workflow:**
-```
-@Andy viết một bài blog 2000 từ về "AI trong năm 2026" kèm SEO optimization
-```
-
-Team làm việc:
-```
-[Sarah]  Research: Xu hướng AI 2026 từ các nguồn uy tín
-[Lisa]   Writing: Bài blog dựa trên research
-[Emma]   Review: Kiểm tra grammar, fact-check
-[Andy]   Final: Bài đã polish, đây là output
-```
-
----
-
-### Use Case 5: Multi-Instance — Scale ra nhiều VPS
-
-**Tình huống:** Workload lớn, muốn phân tán agents ra nhiều máy chủ.
-
-**Kiến trúc:**
-```
-Discord/Telegram Channel (kênh giao tiếp chung)
-        │
-   ┌────┴────┐
-   │         │
-VPS-01      VPS-02
-Andy        Sarah + Mike
-(leader)    (workers)
-Emma
-```
-
-**Cấu hình VPS-01 (`.env`):**
-```env
-INSTANCE_ID=vps-01
-INSTANCE_AGENTS=andy,emma
-DISCORD_BOT_TOKEN_ANDY=...
-DISCORD_BOT_TOKEN_EMMA=...
-```
-
-**Cấu hình VPS-02 (`.env`):**
-```env
-INSTANCE_ID=vps-02
-INSTANCE_AGENTS=sarah,mike
-DISCORD_BOT_TOKEN_SARAH=...
-DISCORD_BOT_TOKEN_MIKE=...
-```
-
-Cả hai VPS kết nối vào cùng một Discord/Telegram channel. Andy gửi `[jimmyclaw:assign]` message → Sarah trên VPS-02 nhận và xử lý → post kết quả → Andy nhận.
-
-**Deploy:**
-```bash
-# Trên cả hai VPS
-git clone ... && cd JimmyClaw
-cp .env.example .env
-# Sửa INSTANCE_ID và INSTANCE_AGENTS tương ứng
-bun install
-jimmyclaw start
-```
-
----
-
-### Use Case 6: Scheduled Automation
-
-**Tình huống:** Muốn AI tự động chạy task định kỳ không cần trigger.
-
-**Cấu hình scheduled tasks** (từ WhatsApp/Telegram):
 ```
 @Andy mỗi sáng thứ Hai 8am, compile AI news từ Hacker News và gửi cho tôi
 @Andy mỗi 5pm thứ Sáu, review git history tuần này và update CHANGELOG
-@Andy mỗi ngày 9am, kiểm tra uptime của server và báo cáo
 ```
 
-JimmyClaw lưu tasks vào SQLite scheduler và tự động execute theo lịch.
+JimmyClaw lưu vào SQLite scheduler và tự động execute theo lịch.
 
 ---
 
-## 9. Chạy Multi-instance Trên Nhiều VPS
-
-### Yêu cầu
-
-- Tất cả instances phải kết nối vào **cùng một** Discord/Telegram channel
-- Mỗi agent chỉ chạy trên **một** instance (không duplicate)
-- Leader (Andy) nên chạy cùng instance với user input channel
-
-### Setup từng bước
-
-**Bước 1: Chọn channel platform**
-
-Discord hoặc Telegram — cả team dùng cùng một kênh.
-
-**Bước 2: Tạo bot cho mỗi agent** (như hướng dẫn ở mục 7)
-
-**Bước 3: Deploy từng instance**
-
-```bash
-# Trên mỗi VPS
-git clone https://github.com/qwibitai/JimmyClaw.git jimmyclaw-vps01
-cd jimmyclaw-vps01
-nano .env
-```
-
-```env
-# .env cho VPS-01 (chạy leader + emma)
-ANTHROPIC_API_KEY=sk-ant-...
-INSTANCE_ID=vps-01
-INSTANCE_AGENTS=andy,emma
-DISCORD_BOT_TOKEN_ANDY=...
-DISCORD_BOT_TOKEN_EMMA=...
-JIMMYCLAW_CHANNEL_PLATFORM=discord
-JIMMYCLAW_CHANNEL_ID=123456789
-```
-
-**Bước 4: Cấu hình `config/agent-swarm.json`**
-
-Trong `instance.localAgents`, chỉ liệt kê agents của instance đó:
-```json
-{
-  "instance": {
-    "id": "vps-01",
-    "localAgents": ["andy", "emma"]
-  }
-}
-```
-
-**Bước 5: Khởi động**
-
-```bash
-bun install && npm run build
-jimmyclaw start
-jimmyclaw status
-```
-
-**Kiểm tra hoạt động:**
-```bash
-jimmyclaw logs -f
-# Bạn sẽ thấy: "Channel messenger initialized"
-# Và khi có task: "Assigning subtask via channel" (remote) vs "Assigning subtask locally"
-```
-
----
-
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### Daemon không start
 
 ```bash
-jimmyclaw status
-# Nếu: "Daemon không chạy"
-
-# Kiểm tra logs
 jimmyclaw logs --lines 50
-
-# Thử start thủ công (xem error trực tiếp)
-bun src/index.ts
+bun src/index.ts    # Xem error trực tiếp
 ```
 
-Lỗi thường gặp:
-- `Missing ANTHROPIC_API_KEY` → Kiểm tra `.env`
-- `Socket already in use` → `rm -f store/jimmyclaw.sock && jimmyclaw start`
-- `Container not found` → `./container/build.sh`
+| Lỗi | Fix |
+|-----|-----|
+| `Missing ANTHROPIC_API_KEY` | Kiểm tra `.env` |
+| `Socket already in use` | `rm -f store/jimmyclaw.sock` |
+| `Container not found` | `docker build -t jimmyclaw-agent:latest -f container/Dockerfile container/` |
+
+### Docker: agent container không spawn
+
+```bash
+# Kiểm tra HOST_PROJECT_ROOT có đúng không
+docker exec jimmyclaw-jimmyclaw-1 env | grep HOST_PROJECT_ROOT
+
+# Kiểm tra Docker socket accessible
+docker exec jimmyclaw-jimmyclaw-1 docker info
+```
+
+Nếu `docker info` lỗi permission: kiểm tra `DOCKER_GID` trong `.env` khớp với GID thực trên host:
+```bash
+getent group docker | cut -d: -f3
+```
 
 ### Agent không respond
 
 ```bash
-# Kiểm tra agent đang busy hay idle
 jimmyclaw agent list
-
-# Xem log của agent cụ thể
 jimmyclaw logs --agent sarah
-
-# Nếu agent bị stuck, restart daemon
 jimmyclaw restart
 ```
 
 ### Team channel không hoạt động
 
 ```bash
-# Kiểm tra config
 jimmyclaw channel
-
-# Kiểm tra bot tokens
 jimmyclaw logs | grep "bot token\|Missing bot\|Channel messenger"
 ```
 
-Lỗi thường gặp:
-- `Missing bot token for agent` → Kiểm tra `DISCORD_BOT_TOKEN_AGENTID` trong `.env`
-- `Failed to initialize channel messenger` → Bot chưa được mời vào server/group
-- Agents không nhận message → Kiểm tra intents đã bật trong Discord Developer Portal
+| Lỗi | Fix |
+|-----|-----|
+| `Missing bot token for agent` | Kiểm tra `DISCORD_BOT_TOKEN_<AGENTID>` trong `.env` |
+| `Failed to initialize channel messenger` | Bot chưa được mời vào server |
+| Agents không nhận message | Kiểm tra intents đã bật trong Discord Developer Portal |
 
-### Task bị timeout
-
-Task mặc định timeout sau 5 phút. Để tăng:
+### Task timeout
 
 ```bash
 jimmyclaw config set taskTimeoutMs 600000  # 10 phút
-# Hoặc per-agent trong config/agent-swarm.json:
-# "timeoutMs": 600000
-```
-
-### Xem chi tiết lỗi
-
-```bash
-# Logs realtime với filter error
-jimmyclaw logs -f --level error
-
-# Hoặc debug mode
-DEBUG=* jimmyclaw start
+# Per-agent trong config/agent-swarm.json: "timeoutMs": 600000
 ```
 
 ### Reset hoàn toàn
@@ -848,6 +694,14 @@ rm -f store/jimmyclaw.db    # CẢNH BÁO: xóa toàn bộ task history và memo
 jimmyclaw start
 ```
 
+Docker:
+```bash
+docker compose down
+rm -rf store/ groups/ data/    # CẢNH BÁO: xóa toàn bộ dữ liệu
+bash docker-prepare.sh /opt/jimmyclaw
+docker compose ... up -d
+```
+
 ---
 
 ## Tham Khảo Thêm
@@ -856,10 +710,8 @@ jimmyclaw start
 |---------|-------|
 | [docs/REQUIREMENTS.md](REQUIREMENTS.md) | Architecture decisions |
 | [docs/SECURITY.md](SECURITY.md) | Security model |
-| [docs/ai/design/feature-team-mesh.md](ai/design/feature-team-mesh.md) | Team mesh architecture |
-| [docs/ai/planning/feature-team-mesh.md](ai/planning/feature-team-mesh.md) | Team mesh implementation phases |
 | Discord community | [discord.gg/VDdww8qS42](https://discord.gg/VDdww8qS42) |
 
 ---
 
-*Tài liệu này được viết cho JimmyClaw v1.1+. Nếu gặp vấn đề không có trong guide, hãy dùng `/debug` trong Claude Code hoặc hỏi trong Discord.*
+*JimmyClaw v1.2+. Gặp vấn đề không có trong guide: dùng `/debug` trong Claude Code hoặc hỏi Discord.*
