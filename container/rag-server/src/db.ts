@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import fs from 'fs';
 import path from 'path';
-import { Chunk, IndexStats, RAGConfig, SearchConfig } from './types.js';
+import { Chunk, IndexStats, KGEdge, KGNode, RAGConfig, SearchConfig } from './types.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS documents (
@@ -98,11 +98,364 @@ export class RAGDatabase {
       ['decay_access_factor', 0.1],
       ['mmr_lambda', 0.7],
       ['session_boost', 0.15],
+      ['graph_weight', 0.2],   // weight for graph signal in RRF
     ];
     const insertConfig = this.db.query(`INSERT OR IGNORE INTO search_config (key, value) VALUES (?, ?)`);
     for (const [key, value] of defaults) {
       insertConfig.run(key, value);
     }
+
+    // ── Knowledge Graph ──────────────────────────────────────────────────────
+    this.db.run(`CREATE TABLE IF NOT EXISTS kg_nodes (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      name      TEXT NOT NULL UNIQUE,
+      node_type TEXT NOT NULL DEFAULT 'other',
+      mention_count INTEGER NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    this.db.run(`CREATE TABLE IF NOT EXISTS kg_edges (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_id    INTEGER NOT NULL REFERENCES kg_nodes(id),
+      target_id    INTEGER NOT NULL REFERENCES kg_nodes(id),
+      relation     TEXT NOT NULL,
+      weight       REAL NOT NULL DEFAULT 1.0,
+      created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- Bi-temporal: T timeline (real-world validity)
+      valid_from   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      valid_until  TIMESTAMP,               -- NULL = still valid in real world
+      -- Bi-temporal: T' timeline (system knowledge)
+      known_from   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      known_until  TIMESTAMP,               -- NULL = system still believes this
+      UNIQUE(source_id, target_id, relation, valid_from)
+    )`);
+    this.migrateKGEdges();
+
+    // alias → canonical node id  (e.g. "Jim" → id of "Jimmy Nguyen")
+    this.db.run(`CREATE TABLE IF NOT EXISTS kg_aliases (
+      alias        TEXT PRIMARY KEY,
+      canonical_id INTEGER NOT NULL REFERENCES kg_nodes(id)
+    )`);
+
+    // Which document chunks mention which entities
+    this.db.run(`CREATE TABLE IF NOT EXISTS kg_chunk_mentions (
+      node_id  INTEGER NOT NULL REFERENCES kg_nodes(id),
+      chunk_id INTEGER NOT NULL REFERENCES documents(id),
+      PRIMARY KEY (node_id, chunk_id)
+    )`);
+
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_kg_edges_source ON kg_edges(source_id)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_kg_edges_target ON kg_edges(target_id)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_kg_edges_valid   ON kg_edges(valid_from, valid_until)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_kg_edges_known   ON kg_edges(known_from, known_until)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_kg_mentions_node ON kg_chunk_mentions(node_id)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_kg_mentions_chunk ON kg_chunk_mentions(chunk_id)`);
+  }
+
+  /** Add bi-temporal columns to kg_edges if they don't exist (safe for existing DBs). */
+  private migrateKGEdges(): void {
+    const cols = this.db.query(`PRAGMA table_info(kg_edges)`).all() as { name: string }[];
+    const names = new Set(cols.map(c => c.name));
+    if (!names.has('valid_from')) {
+      this.db.run(`ALTER TABLE kg_edges ADD COLUMN valid_from  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`);
+    }
+    if (!names.has('valid_until')) {
+      this.db.run(`ALTER TABLE kg_edges ADD COLUMN valid_until TIMESTAMP`);
+    }
+    if (!names.has('known_from')) {
+      this.db.run(`ALTER TABLE kg_edges ADD COLUMN known_from  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`);
+    }
+    if (!names.has('known_until')) {
+      this.db.run(`ALTER TABLE kg_edges ADD COLUMN known_until TIMESTAMP`);
+    }
+    // Fix UNIQUE constraint: old DBs have UNIQUE(source, target, relation),
+    // new schema has UNIQUE(source, target, relation, valid_from).
+    // We can't alter a UNIQUE constraint in SQLite, but since we only INSERT
+    // new records when valid_from differs, the old constraint is fine for
+    // existing rows and we simply rely on application-level logic for new ones.
+  }
+
+  // ── Knowledge Graph API ────────────────────────────────────────────────────
+
+  /** Upsert a node, returning its id. Increments mention_count on re-insert. */
+  upsertNode(name: string, nodeType: string): number {
+    const canonical = name.trim().toLowerCase();
+    this.db.run(`
+      INSERT INTO kg_nodes (name, node_type, mention_count, updated_at)
+      VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+      ON CONFLICT(name) DO UPDATE SET
+        mention_count = mention_count + 1,
+        node_type = excluded.node_type,
+        updated_at = CURRENT_TIMESTAMP
+    `, canonical, nodeType);
+    const row = this.db.query(`SELECT id FROM kg_nodes WHERE name = ?`).get(canonical) as { id: number };
+    return row.id;
+  }
+
+  /** Register alias → canonical node. */
+  upsertAlias(alias: string, canonicalId: number): void {
+    this.db.run(
+      `INSERT OR REPLACE INTO kg_aliases (alias, canonical_id) VALUES (?, ?)`,
+      alias.trim().toLowerCase(), canonicalId,
+    );
+  }
+
+  /** Resolve alias or exact name to node id. Returns null if not found. */
+  resolveEntity(name: string): number | null {
+    const key = name.trim().toLowerCase();
+    const alias = this.db.query(`SELECT canonical_id FROM kg_aliases WHERE alias = ?`).get(key) as { canonical_id: number } | undefined;
+    if (alias) return alias.canonical_id;
+    const node = this.db.query(`SELECT id FROM kg_nodes WHERE name = ?`).get(key) as { id: number } | undefined;
+    return node?.id ?? null;
+  }
+
+  /**
+   * Upsert an edge with optional bi-temporal validity range.
+   *
+   * Bi-temporal semantics:
+   *   validFrom  / validUntil  → T  timeline: when true in the real world
+   *   knownFrom  / knownUntil  → T' timeline: when the system recorded/retracted this
+   *
+   * If a current edge (same source/target/relation, valid_until IS NULL) already
+   * exists, it increments the weight. If validFrom differs (new period), a new
+   * edge row is inserted.
+   */
+  upsertEdge(
+    sourceId: number,
+    targetId: number,
+    relation: string,
+    opts: { validFrom?: string; validUntil?: string } = {},
+  ): number {
+    const now = new Date().toISOString();
+    const validFrom = opts.validFrom ?? now;
+    const validUntil = opts.validUntil ?? null;
+
+    // Check if an "open" edge (valid_until IS NULL) already exists for this triple
+    const existing = this.db.query(`
+      SELECT id FROM kg_edges
+      WHERE source_id = ? AND target_id = ? AND relation = ? AND valid_until IS NULL
+    `).get(sourceId, targetId, relation) as { id: number } | undefined;
+
+    if (existing && !opts.validFrom) {
+      // Same ongoing fact — just bump weight
+      this.db.run(`UPDATE kg_edges SET weight = weight + 1.0 WHERE id = ?`, existing.id);
+      return existing.id;
+    }
+
+    // New temporal period — insert a fresh edge row
+    const result = this.db.run(`
+      INSERT INTO kg_edges
+        (source_id, target_id, relation, weight, valid_from, valid_until, known_from, known_until)
+      VALUES (?, ?, ?, 1.0, ?, ?, ?, NULL)
+    `, sourceId, targetId, relation, validFrom, validUntil, now);
+    return result.lastInsertRowid as number;
+  }
+
+  /**
+   * Mark a currently-open edge as no longer valid in the real world (T timeline).
+   * Sets valid_until = now (or the provided date) and known_until = now (T' timeline).
+   */
+  expireEdge(
+    sourceId: number,
+    targetId: number,
+    relation: string,
+    opts: { validUntil?: string } = {},
+  ): boolean {
+    const now = new Date().toISOString();
+    const validUntil = opts.validUntil ?? now;
+    const result = this.db.run(`
+      UPDATE kg_edges
+      SET valid_until = ?, known_until = ?
+      WHERE source_id = ? AND target_id = ? AND relation = ? AND valid_until IS NULL
+    `, validUntil, now, sourceId, targetId, relation);
+    return (result.changes ?? 0) > 0;
+  }
+
+  /** Link entity mention to a document chunk. */
+  linkMention(nodeId: number, chunkId: number): void {
+    this.db.run(
+      `INSERT OR IGNORE INTO kg_chunk_mentions (node_id, chunk_id) VALUES (?, ?)`,
+      nodeId, chunkId,
+    );
+  }
+
+  /** Get chunk ids that mention a given node. */
+  getChunkIdsByNode(nodeId: number): number[] {
+    const rows = this.db.query(`SELECT chunk_id FROM kg_chunk_mentions WHERE node_id = ?`).all(nodeId) as { chunk_id: number }[];
+    return rows.map(r => r.chunk_id);
+  }
+
+  /**
+   * Get direct neighbours of a node (adjacency list).
+   * @param asOf  ISO date string — only return edges valid at this real-world time (T timeline).
+   *              Defaults to "now" (only currently-valid edges).
+   *              Pass undefined to return ALL edges regardless of validity.
+   */
+  getNeighbours(
+    nodeId: number,
+    asOf?: string | null,
+  ): { nodeId: number; relation: string; weight: number; direction: 'out' | 'in' }[] {
+    // Build temporal filter: only edges where valid_from <= asOf AND (valid_until IS NULL OR valid_until > asOf)
+    const temporalClause = asOf !== undefined
+      ? `AND valid_from <= ? AND (valid_until IS NULL OR valid_until > ?)`
+      : `AND valid_until IS NULL`;  // default: only currently-open edges
+
+    const params = asOf !== undefined
+      ? [nodeId, asOf, asOf]
+      : [nodeId];
+
+    const out = this.db.query(`
+      SELECT target_id as nodeId, relation, weight, 'out' as direction
+      FROM kg_edges WHERE source_id = ? ${temporalClause}
+    `).all(...params) as any[];
+
+    const incParams = asOf !== undefined ? [nodeId, asOf, asOf] : [nodeId];
+    const inc = this.db.query(`
+      SELECT source_id as nodeId, relation, weight, 'in' as direction
+      FROM kg_edges WHERE target_id = ? ${temporalClause}
+    `).all(...incParams) as any[];
+
+    return [...out, ...inc];
+  }
+
+  /** Get node degree (currently-open edges only). Used for hub-node detection. */
+  getNodeDegree(nodeId: number): number {
+    const row = this.db.query(`
+      SELECT COUNT(*) as cnt FROM kg_edges
+      WHERE (source_id = ? OR target_id = ?) AND valid_until IS NULL
+    `).get(nodeId, nodeId) as { cnt: number };
+    return row.cnt;
+  }
+
+  getNodeById(id: number): KGNode | null {
+    const row = this.db.query(`
+      SELECT id, name, node_type as nodeType, mention_count as mentionCount,
+             created_at as createdAt, updated_at as updatedAt
+      FROM kg_nodes WHERE id = ?
+    `).get(id) as KGNode | null;
+    return row;
+  }
+
+  /** Full-text style search over node names. */
+  searchNodes(query: string, limit = 10): KGNode[] {
+    const pattern = `%${query.trim().toLowerCase()}%`;
+    return this.db.query(`
+      SELECT id, name, node_type as nodeType, mention_count as mentionCount,
+             created_at as createdAt, updated_at as updatedAt
+      FROM kg_nodes WHERE name LIKE ? ORDER BY mention_count DESC LIMIT ?
+    `).all(pattern, limit) as KGNode[];
+  }
+
+  listNodes(limit = 50): KGNode[] {
+    return this.db.query(`
+      SELECT id, name, node_type as nodeType, mention_count as mentionCount,
+             created_at as createdAt, updated_at as updatedAt
+      FROM kg_nodes ORDER BY mention_count DESC LIMIT ?
+    `).all(limit) as KGNode[];
+  }
+
+  /**
+   * Get all edges for a node with bi-temporal fields.
+   * @param opts.asOf       Only return edges valid at this real-world time (T). Defaults to current open edges.
+   * @param opts.asKnownAt  Only return edges the system knew about at this transaction time (T'). Optional.
+   */
+  getEdgesForNode(
+    nodeId: number,
+    opts: { asOf?: string; asKnownAt?: string } = {},
+  ): (KGEdge & { sourceName: string; targetName: string })[] {
+    const conditions: string[] = ['(e.source_id = ? OR e.target_id = ?)'];
+
+    if (opts.asOf) {
+      conditions.push(`e.valid_from <= '${opts.asOf}' AND (e.valid_until IS NULL OR e.valid_until > '${opts.asOf}')`);
+    } else {
+      conditions.push('e.valid_until IS NULL');
+    }
+
+    if (opts.asKnownAt) {
+      conditions.push(`e.known_from <= '${opts.asKnownAt}' AND (e.known_until IS NULL OR e.known_until > '${opts.asKnownAt}')`);
+    }
+
+    return this.db.query(`
+      SELECT e.id, e.source_id as sourceId, e.target_id as targetId,
+             e.relation, e.weight, e.created_at as createdAt,
+             e.valid_from as validFrom, e.valid_until as validUntil,
+             e.known_from as knownFrom, e.known_until as knownUntil,
+             s.name as sourceName, t.name as targetName
+      FROM kg_edges e
+      JOIN kg_nodes s ON s.id = e.source_id
+      JOIN kg_nodes t ON t.id = e.target_id
+      WHERE ${conditions.join(' AND ')}
+    `).all(nodeId, nodeId) as any[];
+  }
+
+  /**
+   * Return all edges valid at a given real-world time (T timeline — "AS OF").
+   * Answers: "What relationships existed on this date?"
+   */
+  queryAsOf(asOf: string): (KGEdge & { sourceName: string; targetName: string })[] {
+    return this.db.query(`
+      SELECT e.id, e.source_id as sourceId, e.target_id as targetId,
+             e.relation, e.weight, e.created_at as createdAt,
+             e.valid_from as validFrom, e.valid_until as validUntil,
+             e.known_from as knownFrom, e.known_until as knownUntil,
+             s.name as sourceName, t.name as targetName
+      FROM kg_edges e
+      JOIN kg_nodes s ON s.id = e.source_id
+      JOIN kg_nodes t ON t.id = e.target_id
+      WHERE e.valid_from <= ? AND (e.valid_until IS NULL OR e.valid_until > ?)
+      ORDER BY e.valid_from DESC
+    `).all(asOf, asOf) as any[];
+  }
+
+  /**
+   * Return all edges the system knew about at a given transaction time (T' timeline — "AS KNOWN AT").
+   * Answers: "What did we believe last week?"
+   */
+  queryAsKnownAt(asKnownAt: string): (KGEdge & { sourceName: string; targetName: string })[] {
+    return this.db.query(`
+      SELECT e.id, e.source_id as sourceId, e.target_id as targetId,
+             e.relation, e.weight, e.created_at as createdAt,
+             e.valid_from as validFrom, e.valid_until as validUntil,
+             e.known_from as knownFrom, e.known_until as knownUntil,
+             s.name as sourceName, t.name as targetName
+      FROM kg_edges e
+      JOIN kg_nodes s ON s.id = e.source_id
+      JOIN kg_nodes t ON t.id = e.target_id
+      WHERE e.known_from <= ? AND (e.known_until IS NULL OR e.known_until > ?)
+      ORDER BY e.known_from DESC
+    `).all(asKnownAt, asKnownAt) as any[];
+  }
+
+  /**
+   * Get the full history of an edge relationship (all temporal periods).
+   * Answers: "How has this relationship changed over time?"
+   */
+  getEdgeHistory(
+    sourceId: number,
+    targetId: number,
+    relation: string,
+  ): (KGEdge & { sourceName: string; targetName: string })[] {
+    return this.db.query(`
+      SELECT e.id, e.source_id as sourceId, e.target_id as targetId,
+             e.relation, e.weight, e.created_at as createdAt,
+             e.valid_from as validFrom, e.valid_until as validUntil,
+             e.known_from as knownFrom, e.known_until as knownUntil,
+             s.name as sourceName, t.name as targetName
+      FROM kg_edges e
+      JOIN kg_nodes s ON s.id = e.source_id
+      JOIN kg_nodes t ON t.id = e.target_id
+      WHERE e.source_id = ? AND e.target_id = ? AND e.relation = ?
+      ORDER BY e.valid_from ASC
+    `).all(sourceId, targetId, relation) as any[];
+  }
+
+  getKGStats(): { nodeCount: number; edgeCount: number; aliasCount: number; mentionCount: number } {
+    const nodes = (this.db.query(`SELECT COUNT(*) as c FROM kg_nodes`).get() as { c: number }).c;
+    const edges = (this.db.query(`SELECT COUNT(*) as c FROM kg_edges`).get() as { c: number }).c;
+    const aliases = (this.db.query(`SELECT COUNT(*) as c FROM kg_aliases`).get() as { c: number }).c;
+    const mentions = (this.db.query(`SELECT COUNT(*) as c FROM kg_chunk_mentions`).get() as { c: number }).c;
+    return { nodeCount: nodes, edgeCount: edges, aliasCount: aliases, mentionCount: mentions };
   }
 
   insertChunk(chunk: Omit<Chunk, 'id' | 'createdAt' | 'updatedAt'>): number {
@@ -318,6 +671,7 @@ export class RAGDatabase {
       decay_access_factor: config.decay_access_factor ?? 0.1,
       mmr_lambda: config.mmr_lambda ?? 0.7,
       session_boost: config.session_boost ?? 0.15,
+      graph_weight: config.graph_weight ?? 0.2,
     };
   }
 

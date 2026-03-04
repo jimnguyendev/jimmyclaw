@@ -1,16 +1,21 @@
 import { RAGDatabase } from './db.js';
 import { EmbeddingClient } from './embedding.js';
+import { GraphSearch } from './graph.js';
 import { SearchResult, SearchOptions, SearchConfig } from './types.js';
 
 const DEFAULT_LIMIT = 5;
+// RRF constant — rank 0 still gets a meaningful score
+const RRF_K = 60;
 
 export class SearchEngine {
   private db: RAGDatabase;
   private embedding: EmbeddingClient;
+  private graph: GraphSearch;
 
   constructor(db: RAGDatabase, embedding: EmbeddingClient) {
     this.db = db;
     this.embedding = embedding;
+    this.graph = new GraphSearch(db);
   }
 
   async search(options: SearchOptions): Promise<SearchResult[]> {
@@ -18,24 +23,26 @@ export class SearchEngine {
     const {
       query,
       limit = DEFAULT_LIMIT,
-      bm25Weight = config.bm25_weight,
-      vectorWeight = config.vector_weight,
       mmrLambda = config.mmr_lambda,
       sessionId,
+      entitySeeds,
     } = options;
 
     const candidateLimit = limit * 4;
 
-    // Step 1: BM25 + Vector merge
+    // Step 1: Run BM25, Vector, Graph in parallel
     const [bm25Results, queryEmbedding] = await Promise.all([
       Promise.resolve(this.db.bm25Search(query, candidateLimit)),
       this.embedding.getEmbedding(query),
     ]);
     const vectorResults = this.db.vectorSearch(queryEmbedding, candidateLimit);
+    const graphScores = entitySeeds && entitySeeds.length > 0
+      ? this.graph.search(entitySeeds)
+      : new Map<number, number>();
+    const graphResults = this.graph.toRankedList(graphScores).slice(0, candidateLimit);
 
-    const normalizedBM25 = this.normalizeScores(bm25Results);
-    const normalizedVector = this.normalizeScores(vectorResults);
-    const merged = this.mergeResults(normalizedBM25, normalizedVector, bm25Weight, vectorWeight);
+    // Step 2: RRF merge across all three signals
+    const merged = this.rrfMerge(bm25Results, vectorResults, graphResults);
 
     // Step 2: Temporal decay + access boost + session boost
     const sessionChunkIds = sessionId ? this.db.getSessionChunkIds(sessionId) : new Set<number>();
@@ -56,10 +63,10 @@ export class SearchEngine {
   }
 
   private applyDecayAndBoosts(
-    results: { id: number; score: number; source: 'bm25' | 'vector' | 'hybrid' }[],
+    results: { id: number; score: number; source: 'bm25' | 'vector' | 'hybrid' | 'graph' }[],
     config: SearchConfig,
     sessionChunkIds: Set<number>,
-  ): { id: number; score: number; source: 'bm25' | 'vector' | 'hybrid' }[] {
+  ): { id: number; score: number; source: 'bm25' | 'vector' | 'hybrid' | 'graph' }[] {
     const now = Date.now();
 
     return results.map(r => {
@@ -93,10 +100,10 @@ export class SearchEngine {
   }
 
   private mmrRerank(
-    candidates: { id: number; score: number; source: 'bm25' | 'vector' | 'hybrid' }[],
+    candidates: { id: number; score: number; source: 'bm25' | 'vector' | 'hybrid' | 'graph' }[],
     lambda: number,
     limit: number,
-  ): { id: number; score: number; source: 'bm25' | 'vector' | 'hybrid' }[] {
+  ): { id: number; score: number; source: 'bm25' | 'vector' | 'hybrid' | 'graph' }[] {
     if (candidates.length <= 1) return candidates.slice(0, limit);
 
     // Pre-load embeddings for candidates
@@ -184,43 +191,50 @@ export class SearchEngine {
     return duplicates.sort((a, b) => b.similarity - a.similarity);
   }
 
-  private normalizeScores(results: { id: number; score: number }[]): { id: number; score: number }[] {
-    if (results.length === 0) return results;
-    const scores = results.map(r => r.score);
-    const maxScore = Math.max(...scores);
-    const minScore = Math.min(...scores);
-    const range = maxScore - minScore;
-    if (range === 0) return results.map(r => ({ ...r, score: 1 }));
-    return results.map(r => ({ ...r, score: (r.score - minScore) / range }));
-  }
-
-  private mergeResults(
+  /**
+   * Reciprocal Rank Fusion — position-based merge that is robust to score scale differences.
+   * score(d) = Σ  1 / (k + rank_i(d))   for each result list i
+   *
+   * Advantages over weighted average:
+   *   - No normalisation needed (rank is scale-free)
+   *   - A document appearing in multiple lists is naturally boosted
+   *   - k=60 prevents rank-1 from dominating
+   */
+  private rrfMerge(
     bm25: { id: number; score: number }[],
     vector: { id: number; score: number }[],
-    bm25Weight: number,
-    vectorWeight: number
-  ): { id: number; score: number; source: 'bm25' | 'vector' | 'hybrid' }[] {
-    const merged = new Map<number, { id: number; score: number; source: 'bm25' | 'vector' | 'hybrid' }>();
+    graph: { id: number; score: number }[],
+  ): { id: number; score: number; source: 'bm25' | 'vector' | 'hybrid' | 'graph' | 'graph' }[] {
+    const scores = new Map<number, number>();
+    const sources = new Map<number, Set<string>>();
 
-    for (const r of bm25) {
-      merged.set(r.id, { id: r.id, score: r.score * bm25Weight, source: 'bm25' });
-    }
+    const addList = (list: { id: number; score: number }[], label: string) => {
+      // Sort descending so rank 0 = best
+      const sorted = [...list].sort((a, b) => b.score - a.score);
+      sorted.forEach(({ id }, rank) => {
+        scores.set(id, (scores.get(id) ?? 0) + 1 / (RRF_K + rank + 1));
+        if (!sources.has(id)) sources.set(id, new Set());
+        sources.get(id)!.add(label);
+      });
+    };
 
-    for (const r of vector) {
-      const existing = merged.get(r.id);
-      if (existing) {
-        existing.score += r.score * vectorWeight;
-        existing.source = 'hybrid';
-      } else {
-        merged.set(r.id, { id: r.id, score: r.score * vectorWeight, source: 'vector' });
-      }
-    }
+    addList(bm25, 'bm25');
+    addList(vector, 'vector');
+    if (graph.length > 0) addList(graph, 'graph');
 
-    return Array.from(merged.values());
+    return [...scores.entries()].map(([id, score]) => {
+      const s = sources.get(id)!;
+      let source: 'bm25' | 'vector' | 'hybrid' | 'graph' | 'graph';
+      if (s.size > 1) source = 'hybrid';
+      else if (s.has('graph')) source = 'graph';
+      else if (s.has('vector')) source = 'vector';
+      else source = 'bm25';
+      return { id, score, source };
+    });
   }
 
   private enrichResults(
-    results: { id: number; score: number; source: 'bm25' | 'vector' | 'hybrid' }[]
+    results: { id: number; score: number; source: 'bm25' | 'vector' | 'hybrid' | 'graph' }[]
   ): SearchResult[] {
     const enriched: SearchResult[] = [];
     for (const result of results) {
