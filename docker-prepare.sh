@@ -25,13 +25,15 @@ fi
 DOCKER_GID=$(getent group docker | cut -d: -f3 || echo "999")
 echo "→ Docker GID: $DOCKER_GID"
 
-# Write .env for docker-compose
-cat >> "$DEPLOY_DIR/.env" << EOF
+# Write docker deployment settings to .env (skip if already present)
+if ! grep -q "HOST_PROJECT_ROOT" "$DEPLOY_DIR/.env" 2>/dev/null; then
+    cat >> "$DEPLOY_DIR/.env" << EOF
 
 # Docker deployment settings
 HOST_PROJECT_ROOT=$DEPLOY_DIR
 DOCKER_GID=$DOCKER_GID
 EOF
+fi
 
 echo ""
 echo "✓ Done. Next steps:"
