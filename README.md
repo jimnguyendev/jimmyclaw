@@ -3,17 +3,18 @@
 </p>
 
 <p align="center">
-  <strong>JimmyClaw</strong> — A TypeScript/Bun multi-agent AI gateway with container isolation, agent swarms, and programmable skill system.
+  <strong>JimmyClaw</strong> — Personal fork of <a href="https://github.com/qwibitai/nanoclaw">NanoClaw</a> for learning and personal use.
 </p>
 
 <p align="center">
-  <a href="https://jimmyclaw.dev">jimmyclaw.dev</a>&nbsp; • &nbsp;
   <a href="repo-tokens"><img src="repo-tokens/badge.svg" alt="34.9k tokens, 17% of context window" valign="middle"></a>
 </p>
 
-[![Bun](https://img.shields.io/badge/Bun_1.2+-000000?style=flat-square&logo=bun&logoColor=white)](https://bun.sh/) [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://sqlite.org/) [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/) [![Anthropic](https://img.shields.io/badge/Anthropic-191919?style=flat-square&logo=anthropic&logoColor=white)](https://www.anthropic.com/) [![OpenAI Compatible](https://img.shields.io/badge/OpenAI_Compatible-412991?style=flat-square&logo=openai&logoColor=white)](https://openai.com/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
+[![Bun](https://img.shields.io/badge/Bun_1.2+-000000?style=flat-square&logo=bun&logoColor=white)](https://bun.sh/) [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://sqlite.org/) [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/) [![Anthropic](https://img.shields.io/badge/Anthropic-191919?style=flat-square&logo=anthropic&logoColor=white)](https://www.anthropic.com/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
-A TypeScript/Bun port of [NanoClaw](https://github.com/qwibitai/NanoClaw) with enhanced agent orchestration, delegation system, quality gates, and a programmable skill framework.
+> **Note:** This is a personal fork of [NanoClaw](https://github.com/qwibitai/nanoclaw) by [@qwibitai](https://github.com/qwibitai), shared publicly for learning and reference purposes. It includes personal customizations, experimental features, and configurations specific to my own use case. For production use, refer to the upstream project.
+
+Personal customizations on top of NanoClaw: OpenRouter MCP server, configurable API backend selection (Z.ai / Anthropic / OpenRouter), tri-hybrid RAG memory system (BM25 + vector + knowledge graph), and various workflow adjustments.
 
 ## What Makes It Different
 
