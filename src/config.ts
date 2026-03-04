@@ -15,6 +15,7 @@ const envConfig = readEnvFile([
   'TEAM_CHANNEL_PLATFORM',
   'INSTANCE_ID',
   'INSTANCE_AGENTS',
+  'API_BACKEND',
 ]);
 
 export const ASSISTANT_NAME = process.env.ASSISTANT_NAME || envConfig.ASSISTANT_NAME || 'Andy';
@@ -93,3 +94,9 @@ export const INSTANCE_AGENTS = (process.env.INSTANCE_AGENTS || envConfig.INSTANC
 
 export const DISCORD_BOT_TOKEN =
   process.env.DISCORD_BOT_TOKEN || envConfig.DISCORD_BOT_TOKEN || '';
+
+// API Backend selection: 'zai' | 'anthropic' | 'openrouter' | 'auto'
+export type ApiBackend = 'zai' | 'anthropic' | 'openrouter' | 'auto';
+export const API_BACKEND = (
+  process.env.API_BACKEND || envConfig.API_BACKEND || 'auto'
+).toLowerCase() as ApiBackend;

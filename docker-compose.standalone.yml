@@ -13,3 +13,4 @@ services:
       - ./store:/app/store
       - ./data:/app/data
       - ./config:/app/config:ro
+      

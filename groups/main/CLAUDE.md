@@ -57,23 +57,31 @@ Organized by topic, searchable with Grep.
 Searchable history of past conversations. Use to recall context from previous sessions.
 
 ### Memory Protocol
-1. **Session Start**: 
+1. **Session Start**:
    - Read MEMORY.md
    - Read memory/today.md (today's date)
    - Read memory/yesterday.md
+   - Call `mcp__rag-server__memory_reindex` to ensure index is up-to-date
 
-2. **During Session**: 
+2. **During Session**:
    - Append notes to daily log (memory/YYYY-MM-DD.md)
    - Update MEMORY.md for permanent facts
    - Create/update files in knowledge/ for structured data
+   - After writing/updating any memory file, call `mcp__rag-server__memory_reindex`
 
-3. **When User Says "Remember This"**: 
+3. **Searching Past Context**:
+   - Use `mcp__rag-server__memory_search` for semantic/conceptual queries (e.g. "what did user say about X?")
+   - Use `Grep` only for exact-match lookups when you know the file
+   - Pass `entity_seeds` when searching about a specific person or project
+
+4. **When User Says "Remember This"**:
    - For preferences → MEMORY.md ## Preferences
    - For contacts → MEMORY.md ## Contacts
    - For project info → knowledge/projects/
    - For temporary notes → memory/YYYY-MM-DD.md
+   - For entities/relationships (people, projects, concepts) → call `mcp__rag-server__memory_kg_index`
 
-4. **File Size Limits**:
+5. **File Size Limits**:
    - MEMORY.md: Max 500 lines (split if larger)
    - Daily logs: Archive after 30 days
    - Knowledge files: Max 500 lines each

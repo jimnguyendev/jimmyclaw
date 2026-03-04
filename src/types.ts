@@ -30,6 +30,9 @@ export interface AllowedRoot {
 export interface ContainerConfig {
   additionalMounts?: AdditionalMount[];
   timeout?: number; // Default: 300000 (5 minutes)
+  openrouterModel?: string; // OpenRouter model for general Q&A
+  embeddingModel?: string; // Embedding model for RAG (default: openai/text-embedding-3-small)
+  embeddingDimension?: number; // Must match the embedding model's output dimension
 }
 
 export interface RegisteredGroup {

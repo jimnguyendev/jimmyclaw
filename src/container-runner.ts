@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 
 import {
+  API_BACKEND,
   CONTAINER_IMAGE,
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_TIMEOUT,
@@ -202,15 +203,36 @@ function buildVolumeMounts(group: RegisteredGroup, isMain: boolean): VolumeMount
 
     // RAG server for memory search (always available)
     const openrouterKey = process.env.OPENROUTER_API_KEY || zAiKey || '';
+    const ragEnv: Record<string, string> = {
+      OPENROUTER_API_KEY: openrouterKey,
+      Z_AI_API_KEY: zAiKey || '',
+      NANOCLAW_GROUP_FOLDER: group.folder,
+    };
+    if (group.containerConfig?.embeddingModel) {
+      ragEnv.EMBEDDING_MODEL = group.containerConfig.embeddingModel;
+    }
+    if (group.containerConfig?.embeddingDimension) {
+      ragEnv.EMBEDDING_DIMENSION = String(group.containerConfig.embeddingDimension);
+    }
     mcpServers['rag-server'] = {
       command: 'bun',
       args: ['run', '/app/rag-server/dist/index.js'],
-      env: {
-        OPENROUTER_API_KEY: openrouterKey,
-        Z_AI_API_KEY: zAiKey || '',
-        NANOCLAW_GROUP_FOLDER: group.folder,
-      },
+      env: ragEnv,
     };
+
+    // OpenRouter server — general Q&A, life advice, research via configurable model
+    if (openrouterKey) {
+      const openrouterModel =
+        group.containerConfig?.openrouterModel || 'arcee-ai/trinity-large-preview:free';
+      mcpServers['openrouter'] = {
+        command: 'bun',
+        args: ['run', '/app/openrouter-server/dist/index.js'],
+        env: {
+          OPENROUTER_API_KEY: openrouterKey,
+          OPENROUTER_MODEL: openrouterModel,
+        },
+      };
+    }
 
     if (Object.keys(mcpServers).length > 0) {
       settings.mcpServers = mcpServers;
@@ -269,7 +291,7 @@ function buildVolumeMounts(group: RegisteredGroup, isMain: boolean): VolumeMount
       group.name,
       isMain,
     );
-    mounts.push(...validatedMounts);
+    mounts.push(...validatedMounts.map((m) => ({ ...m, hostPath: toHostPath(m.hostPath) })));
   }
 
   return mounts;
@@ -365,6 +387,8 @@ export async function runContainerAgent(
 
     // Pass secrets via stdin (never written to disk or mounted as files)
     input.secrets = readSecrets();
+    // Pass API backend preference to container
+    (input.secrets as Record<string, string>).API_BACKEND = API_BACKEND;
     container.stdin.write(JSON.stringify(input));
     container.stdin.end();
     // Remove secrets from input so they don't appear in logs

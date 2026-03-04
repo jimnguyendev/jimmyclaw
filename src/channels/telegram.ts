@@ -124,8 +124,8 @@ export class TelegramChannel implements Channel {
     });
 
     this.bot.on('message:text', async (ctx) => {
-      // Skip commands
-      if (ctx.message.text.startsWith('/')) return;
+      // /chatid and /ping are handled by bot.command() above (grammy runs them first).
+      // Other /commands (e.g. /workspace, /swarm) flow through to the message loop.
 
       const chatJid = `tg:${ctx.chat.id}`;
       let content = ctx.message.text;

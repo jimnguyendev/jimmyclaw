@@ -433,7 +433,8 @@ async function runQuery(
       'mcp__web-search-prime__*',
       'mcp__web-reader__*',
       'mcp__zread__*',
-      'mcp__rag-server__*'
+      'mcp__rag-server__*',
+      'mcp__openrouter__*'
     ],
     agents: agentsOption,
     env: sdkEnv,
@@ -472,7 +473,18 @@ async function runQuery(
 
     if (message.type === 'result') {
       resultCount++;
-      const textResult = 'result' in message ? (message as { result?: string }).result : null;
+      let textResult = 'result' in message ? (message as { result?: string }).result : null;
+      // Strip leaked backend JSON metadata (Z.ai/OpenRouter usage stats appended to result)
+      if (textResult) {
+        // Remove trailing JSON blobs that start after </arg_value> or similar SDK XML artifacts
+        const xmlArtifact = textResult.lastIndexOf('</arg_value>');
+        if (xmlArtifact !== -1) {
+          textResult = textResult.slice(0, xmlArtifact).trim();
+        }
+        // Remove trailing raw JSON objects with finish_reason/usage fields
+        textResult = textResult.replace(/\s*[\w-]*","model_input_tokens":\d.*$/s, '').trim();
+        textResult = textResult.replace(/\s*"finish_reason":"stop","usage":\{.*$/s, '').trim();
+      }
       log(`Result #${resultCount}: subtype=${message.subtype}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`);
       writeOutput({
         status: 'success',
@@ -511,12 +523,47 @@ async function main(): Promise<void> {
     sdkEnv[key] = value;
   }
 
-  // Z.ai backend: route API calls through Z.ai proxy
-  if (sdkEnv.Z_AI_API_KEY) {
-    sdkEnv.ANTHROPIC_BASE_URL = 'https://api.z.ai/api/anthropic';
-    sdkEnv.ANTHROPIC_AUTH_TOKEN = sdkEnv.Z_AI_API_KEY;
-    sdkEnv.API_TIMEOUT_MS = '3000000';
-    log('Using Z.ai as API backend');
+  // API Backend selection with priority
+  const apiBackend = (sdkEnv.API_BACKEND || 'auto').toLowerCase();
+  log(`API backend preference: ${apiBackend}`);
+
+  if (apiBackend === 'zai' || (apiBackend === 'auto' && sdkEnv.Z_AI_API_KEY)) {
+    // Z.ai backend: route API calls through Z.ai proxy
+    if (sdkEnv.Z_AI_API_KEY) {
+      sdkEnv.ANTHROPIC_BASE_URL = 'https://api.z.ai/api/anthropic';
+      sdkEnv.ANTHROPIC_AUTH_TOKEN = sdkEnv.Z_AI_API_KEY;
+      sdkEnv.API_TIMEOUT_MS = '3000000';
+      log('Using Z.ai as API backend');
+    } else {
+      log('Z.ai backend requested but no Z_AI_API_KEY found');
+    }
+  } else if (apiBackend === 'anthropic') {
+    // Use Anthropic API directly (default SDK behavior)
+    log('Using Anthropic API directly');
+    // SDK will use ANTHROPIC_API_KEY from secrets automatically
+  } else if (apiBackend === 'openrouter') {
+    // OpenRouter backend
+    if (sdkEnv.OPENROUTER_API_KEY) {
+      sdkEnv.ANTHROPIC_BASE_URL = 'https://openrouter.ai/api/v1';
+      sdkEnv.ANTHROPIC_AUTH_TOKEN = sdkEnv.OPENROUTER_API_KEY;
+      log('Using OpenRouter as API backend');
+    } else {
+      log('OpenRouter backend requested but no OPENROUTER_API_KEY found');
+    }
+  } else if (apiBackend === 'auto') {
+    // Auto-detect: priority Z.ai > Anthropic > OpenRouter
+    if (sdkEnv.Z_AI_API_KEY) {
+      sdkEnv.ANTHROPIC_BASE_URL = 'https://api.z.ai/api/anthropic';
+      sdkEnv.ANTHROPIC_AUTH_TOKEN = sdkEnv.Z_AI_API_KEY;
+      sdkEnv.API_TIMEOUT_MS = '3000000';
+      log('Auto-detected: Using Z.ai as API backend');
+    } else if (sdkEnv.OPENROUTER_API_KEY) {
+      sdkEnv.ANTHROPIC_BASE_URL = 'https://openrouter.ai/api/v1';
+      sdkEnv.ANTHROPIC_AUTH_TOKEN = sdkEnv.OPENROUTER_API_KEY;
+      log('Auto-detected: Using OpenRouter as API backend');
+    } else {
+      log('Auto-detected: Using Anthropic API directly');
+    }
   }
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));

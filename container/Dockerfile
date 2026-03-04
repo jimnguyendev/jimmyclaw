@@ -51,6 +51,14 @@ RUN bun install
 COPY rag-server/ ./
 RUN bun run build
 
+# ===== OpenRouter Server =====
+WORKDIR /app
+COPY openrouter-server/package.json ./openrouter-server/
+WORKDIR /app/openrouter-server
+RUN bun install
+COPY openrouter-server/ ./
+RUN bun run build
+
 # Create workspace directories
 WORKDIR /app
 RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input /workspace/project/data/rag

@@ -47,6 +47,7 @@ import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 import { initSwarmMode, getOrchestrator, isSwarmEnabled, shutdownSwarm, runSwarmAgent } from './swarm.js';
 import { createSwarmCommandHandler, isSwarmCommand } from './swarm-commands.js';
+import { isWorkspaceCommand, handleWorkspaceCommand } from './workspace-commands.js';
 import { startApiServer, stopApiServer, ApiDeps } from './api-server.js';
 import { loadSwarmConfig, saveSwarmConfig, addWorkerAgent, removeWorkerAgent, renameAgent, updateAgentModel, updateAgentSystemPrompt, updateSettings, getOrchestratorConfig, resetToDefault } from './swarm-config.js';
 
@@ -154,6 +155,19 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   }
 
   const prompt = formatMessages(missedMessages);
+
+  // Check for workspace mount commands
+  if (isWorkspaceCommand(prompt)) {
+    const result = await handleWorkspaceCommand(prompt, { ...group, jid: chatJid });
+    if (result.handled) {
+      if (result.response) await channel.sendMessage(chatJid, result.response);
+      lastAgentTimestamp[chatJid] = missedMessages[missedMessages.length - 1].timestamp;
+      // Reload group state so next invocation sees updated mounts
+      registeredGroups = getAllRegisteredGroups();
+      saveState();
+      return true;
+    }
+  }
 
   // Check for swarm commands first
   if (isSwarmEnabled() && isSwarmCommand(prompt)) {

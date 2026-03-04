@@ -32,6 +32,10 @@
 -->
 
 ## Projects
+### News Monitoring
+- Status: active
+- Priority: high
+- Notes: Monitor Facebook page "Quân Tin Việt Nam" (https://www.facebook.com/QuanTin.VietNam) for daily military and defense news updates
 <!-- Add projects here with format:
 ### [Project Name]
 - Status: [active/paused/completed]

@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 import { RAGDatabase } from './db.js';
 
-const EMBEDDING_MODEL = 'openai/text-embedding-3-small';
-const EMBEDDING_DIMENSION = 1536;
+const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'openai/text-embedding-3-small';
+const EMBEDDING_DIMENSION = parseInt(process.env.EMBEDDING_DIMENSION || '1536', 10);
 const MAX_INPUT_LENGTH = 8000;
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/embeddings';
 const L1_CACHE_MAX = 50;

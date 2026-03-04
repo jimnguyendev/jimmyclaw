@@ -17,8 +17,8 @@ const DB_PATH = path.join(DATA_DIR, 'rag', `${GROUP_FOLDER}.sqlite`);
 const config: RAGConfig = {
   dbPath: DB_PATH,
   groupFolder: GROUP_FOLDER,
-  embeddingModel: 'text-embedding-3-small',
-  embeddingDimension: 1536,
+  embeddingModel: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
+  embeddingDimension: parseInt(process.env.EMBEDDING_DIMENSION || '1536', 10),
   chunkSize: 400,
   chunkOverlap: 80,
 };
