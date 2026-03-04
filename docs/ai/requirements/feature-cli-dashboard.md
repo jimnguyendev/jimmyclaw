@@ -9,7 +9,7 @@ status: planned
 
 ## Bối cảnh
 
-NanoClaw chạy trên VPS như một daemon. Người dùng kỹ thuật quản lý qua SSH — không có browser, không cần web UI. Mọi tác vụ cấu hình và monitor phải thực hiện được từ terminal.
+JimmyClaw chạy trên VPS như một daemon. Người dùng kỹ thuật quản lý qua SSH — không có browser, không cần web UI. Mọi tác vụ cấu hình và monitor phải thực hiện được từ terminal.
 
 ## Yêu cầu chức năng
 
@@ -17,11 +17,11 @@ NanoClaw chạy trên VPS như một daemon. Người dùng kỹ thuật quản 
 
 | ID | Yêu cầu |
 |----|---------|
-| FR-1.1 | Người dùng gõ `nanoclaw <command>` để thực hiện tác vụ mà không cần mở Telegram/Discord |
+| FR-1.1 | Người dùng gõ `jimmyclaw <command>` để thực hiện tác vụ mà không cần mở Telegram/Discord |
 | FR-1.2 | Tất cả cấu hình hiện có (agent, config, env, channel, service) phải có command tương ứng |
 | FR-1.3 | Mọi command phải hỗ trợ flag `--json` để output dạng JSON cho scripting |
 | FR-1.4 | Command sai hoặc thiếu argument phải in hướng dẫn rõ ràng |
-| FR-1.5 | `nanoclaw --help` và `nanoclaw <command> --help` hoạt động đầy đủ |
+| FR-1.5 | `jimmyclaw --help` và `jimmyclaw <command> --help` hoạt động đầy đủ |
 
 ### FR-2: Interactive prompts
 
@@ -36,7 +36,7 @@ NanoClaw chạy trên VPS như một daemon. Người dùng kỹ thuật quản 
 
 | ID | Yêu cầu |
 |----|---------|
-| FR-3.1 | `nanoclaw` không có argument mở TUI fullscreen |
+| FR-3.1 | `jimmyclaw` không có argument mở TUI fullscreen |
 | FR-3.2 | TUI hiển thị trạng thái agents (idle/busy), task queue, activity log, thông tin hệ thống |
 | FR-3.3 | Dữ liệu tự refresh không cần thao tác người dùng |
 | FR-3.4 | Keyboard shortcuts để thực hiện các tác vụ thường dùng |
@@ -46,7 +46,7 @@ NanoClaw chạy trên VPS như một daemon. Người dùng kỹ thuật quản 
 
 | ID | Yêu cầu |
 |----|---------|
-| FR-4.1 | `nanoclaw logs` tail log realtime |
+| FR-4.1 | `jimmyclaw logs` tail log realtime |
 | FR-4.2 | Filter theo agent ID |
 | FR-4.3 | Filter theo log level (debug/info/warn/error) |
 | FR-4.4 | Filter theo khoảng thời gian (`--since 1h`) |
@@ -56,8 +56,8 @@ NanoClaw chạy trên VPS như một daemon. Người dùng kỹ thuật quản 
 
 | ID | Yêu cầu |
 |----|---------|
-| FR-5.1 | `nanoclaw start/stop/restart` quản lý daemon |
-| FR-5.2 | `nanoclaw service install` đăng ký launchd (macOS) hoặc systemd (Linux) tự động |
+| FR-5.1 | `jimmyclaw start/stop/restart` quản lý daemon |
+| FR-5.2 | `jimmyclaw service install` đăng ký launchd (macOS) hoặc systemd (Linux) tự động |
 | FR-5.3 | Hiển thị trạng thái daemon (running/stopped/error) |
 
 ## Yêu cầu phi chức năng

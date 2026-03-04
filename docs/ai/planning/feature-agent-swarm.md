@@ -13,7 +13,7 @@ description: Task breakdown, dependencies, and timeline for multi-agent swarm sy
 - [ ] **M3: Task System** (Day 2-3) - Task queue, assignment, tracking
 - [ ] **M4: Shared Memory** (Day 3) - Memory store, search
 - [ ] **M5: Agent Runtime** (Day 4-5) - Base agent, leader, worker
-- [ ] **M6: Integration** (Day 5) - NanoClaw integration, tools
+- [ ] **M6: Integration** (Day 5) - JimmyClaw integration, tools
 - [ ] **M7: Testing** (Day 6) - Unit tests, integration tests
 - [ ] **M8: Documentation** (Day 6) - User docs, API docs
 
@@ -266,7 +266,7 @@ description: Task breakdown, dependencies, and timeline for multi-agent swarm sy
 
 ### Phase 7: Integration (Day 5)
 
-#### 7.1 NanoClaw Integration
+#### 7.1 JimmyClaw Integration
 - [ ] Update `src/index.ts` for swarm mode
 - [ ] Update `src/db.ts` for swarm tables
 - [ ] Update `src/container-runner.ts` for swarm tools
@@ -438,7 +438,7 @@ graph LR
 
 | Risk | Impact | Probability | Mitigation |
 |------|--------|-------------|------------|
-| Breaking existing NanoClaw | High | Low | Feature flag, separate code path |
+| Breaking existing JimmyClaw | High | Low | Feature flag, separate code path |
 | Container isolation conflicts | Medium | Medium | Test thoroughly, document requirements |
 | Environment variable conflicts | Low | Low | Use SWARM_ prefix |
 

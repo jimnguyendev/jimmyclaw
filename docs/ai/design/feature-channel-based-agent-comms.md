@@ -13,7 +13,7 @@ Thay thế SQLite message queue ẩn bằng một Discord hoặc Telegram channe
 
 **Lợi ích chính:**
 - User quan sát team làm việc real-time
-- Multiple NanoClaw instances trên nhiều VPS vẫn cộng tác được qua cùng một channel
+- Multiple JimmyClaw instances trên nhiều VPS vẫn cộng tác được qua cùng một channel
 - Human-in-the-loop tự nhiên: user nhảy vào channel và re-direct bất kỳ lúc nào
 - Audit log miễn phí từ platform
 - Không cần dashboard hay monitoring tool riêng
@@ -38,7 +38,7 @@ Thay thế SQLite message queue ẩn bằng một Discord hoặc Telegram channe
 │  🎯 Nam:   → User: Kết quả cuối cùng: [tổng hợp]               │
 └──────────────────────────────────────────────────────────────────┘
          ↑                               ↑
-  NanoClaw Instance A (VPS 1)    NanoClaw Instance B (VPS 2)
+  JimmyClaw Instance A (VPS 1)    JimmyClaw Instance B (VPS 2)
   Agents: Nam (leader), Linh     Agents: Duc (coder), Trang (reviewer)
 ```
 
@@ -118,7 +118,7 @@ Ví dụ:
 
 #### Mention routing
 
-Mỗi NanoClaw instance chỉ xử lý message có @mention đến agent **của mình**:
+Mỗi JimmyClaw instance chỉ xử lý message có @mention đến agent **của mình**:
 
 ```typescript
 // src/orchestrator/channel-messenger.ts
@@ -223,7 +223,7 @@ User:  @nam tổng hợp lại từ đầu với hướng mới
 Nam:   Đã nhận, đang re-assign tasks...
 ```
 
-NanoClaw nhận ra message từ human (dựa vào sender không phải bot) và route vào orchestrator như một task mới hoặc interruption.
+JimmyClaw nhận ra message từ human (dựa vào sender không phải bot) và route vào orchestrator như một task mới hoặc interruption.
 
 ---
 

@@ -10,7 +10,7 @@ description: Technical architecture for multi-provider LLM support
 
 ```mermaid
 graph TB
-    subgraph "NanoClaw Core"
+    subgraph "JimmyClaw Core"
         CM[Container Manager]
         RQ[Request Queue]
         LLM[LLM Provider Manager]

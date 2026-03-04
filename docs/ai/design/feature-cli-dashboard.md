@@ -1,7 +1,7 @@
 ---
 phase: design
 title: CLI Dashboard
-description: Interactive terminal UI và command-line interface để cấu hình và monitor NanoClaw
+description: Interactive terminal UI và command-line interface để cấu hình và monitor JimmyClaw
 status: planned
 ---
 
@@ -9,7 +9,7 @@ status: planned
 
 ## Mục tiêu
 
-NanoClaw hiện tại là daemon chạy ngầm — cấu hình thông qua file `.env`, JSON, và chat commands trong Telegram/Discord. Tất cả mọi thứ phải có thể cấu hình trực tiếp từ terminal, đặc biệt hữu ích khi quản lý nhiều VPS.
+JimmyClaw hiện tại là daemon chạy ngầm — cấu hình thông qua file `.env`, JSON, và chat commands trong Telegram/Discord. Tất cả mọi thứ phải có thể cấu hình trực tiếp từ terminal, đặc biệt hữu ích khi quản lý nhiều VPS.
 
 ---
 
@@ -20,7 +20,7 @@ NanoClaw hiện tại là daemon chạy ngầm — cấu hình thông qua file `
 | Cấu hình cơ bản | Sửa `.env` tay | Không validate, không gợi ý |
 | Cấu hình swarm | Chat `/swarm config set key val` | Phải mở Telegram/Discord |
 | Xem trạng thái | Chat `/swarm status` | Không realtime |
-| Xem logs | `cat store/logs/nanoclaw.log` | Không filter |
+| Xem logs | `cat store/logs/jimmyclaw.log` | Không filter |
 | Thêm agent | Chat `/swarm agent add ...` | Phải nhớ syntax |
 | Restart service | `launchctl kickstart ...` | Lệnh dài, khó nhớ |
 
@@ -28,13 +28,13 @@ NanoClaw hiện tại là daemon chạy ngầm — cấu hình thông qua file `
 
 ## Hai chế độ CLI
 
-### Chế độ 1: Interactive TUI (`nanoclaw`)
+### Chế độ 1: Interactive TUI (`jimmyclaw`)
 
-Chạy `nanoclaw` không có argument → mở terminal dashboard fullscreen:
+Chạy `jimmyclaw` không có argument → mở terminal dashboard fullscreen:
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║  NanoClaw  v2.0   VPS-1   ● Running   [q]uit  [?]help           ║
+║  JimmyClaw  v2.0   VPS-1   ● Running   [q]uit  [?]help           ║
 ╠═════════════════════╦════════════════════════════════════════════╣
 ║  AGENTS             ║  ACTIVITY LOG                              ║
 ║  ─────────────────  ║  ──────────────────────────────────────── ║
@@ -74,51 +74,51 @@ Chạy `nanoclaw` không có argument → mở terminal dashboard fullscreen:
 
 ---
 
-### Chế độ 2: Command Mode (`nanoclaw <command>`)
+### Chế độ 2: Command Mode (`jimmyclaw <command>`)
 
 Dùng cho scripting, CI/CD, automation:
 
 ```bash
 # --- Status & Monitor ---
-nanoclaw status                        # tổng quan nhanh
-nanoclaw status --json                 # output JSON cho scripting
-nanoclaw agents                        # list agents
-nanoclaw tasks                         # list tasks hiện tại
-nanoclaw logs                          # tail logs realtime
-nanoclaw logs --lines 100              # N dòng cuối
-nanoclaw logs --agent linh             # filter theo agent
-nanoclaw logs --level error            # filter theo level
+jimmyclaw status                        # tổng quan nhanh
+jimmyclaw status --json                 # output JSON cho scripting
+jimmyclaw agents                        # list agents
+jimmyclaw tasks                         # list tasks hiện tại
+jimmyclaw logs                          # tail logs realtime
+jimmyclaw logs --lines 100              # N dòng cuối
+jimmyclaw logs --agent linh             # filter theo agent
+jimmyclaw logs --level error            # filter theo level
 
 # --- Agent Management ---
-nanoclaw agent add <id> <role> <model>
-nanoclaw agent remove <id>
-nanoclaw agent rename <old> <new>
-nanoclaw agent model <id> <model>
-nanoclaw agent prompt <id>             # mở editor sửa system prompt
+jimmyclaw agent add <id> <role> <model>
+jimmyclaw agent remove <id>
+jimmyclaw agent rename <old> <new>
+jimmyclaw agent model <id> <model>
+jimmyclaw agent prompt <id>             # mở editor sửa system prompt
 
 # --- Config ---
-nanoclaw config show                   # in config hiện tại
-nanoclaw config set <key> <value>      # sửa một key
-nanoclaw config edit                   # mở $EDITOR
-nanoclaw config reset                  # về default
+jimmyclaw config show                   # in config hiện tại
+jimmyclaw config set <key> <value>      # sửa một key
+jimmyclaw config edit                   # mở $EDITOR
+jimmyclaw config reset                  # về default
 
 # --- Channel ---
-nanoclaw channel show                  # xem channel config
-nanoclaw channel set discord <channelId>
-nanoclaw channel set telegram <chatId>
-nanoclaw channel test                  # gửi test message
+jimmyclaw channel show                  # xem channel config
+jimmyclaw channel set discord <channelId>
+jimmyclaw channel set telegram <chatId>
+jimmyclaw channel test                  # gửi test message
 
 # --- Service ---
-nanoclaw start
-nanoclaw stop
-nanoclaw restart
-nanoclaw service install               # register launchd/systemd
-nanoclaw service uninstall
+jimmyclaw start
+jimmyclaw stop
+jimmyclaw restart
+jimmyclaw service install               # register launchd/systemd
+jimmyclaw service uninstall
 
 # --- Env / Secrets ---
-nanoclaw env show                      # in keys (không in values)
-nanoclaw env set <KEY> <VALUE>
-nanoclaw env unset <KEY>
+jimmyclaw env show                      # in keys (không in values)
+jimmyclaw env set <KEY> <VALUE>
+jimmyclaw env unset <KEY>
 ```
 
 ---
@@ -155,12 +155,12 @@ src/cli/
 
 ### Giao tiếp CLI ↔ Daemon
 
-CLI không import code của daemon trực tiếp. Giao tiếp qua **Unix socket** (`store/nanoclaw.sock`):
+CLI không import code của daemon trực tiếp. Giao tiếp qua **Unix socket** (`store/jimmyclaw.sock`):
 
 ```
 CLI process                    Daemon process
 ──────────                     ──────────────
-nanoclaw agents  →  socket  →  AgentRegistry.list()
+jimmyclaw agents  →  socket  →  AgentRegistry.list()
                  ←  socket  ←  JSON response
 ```
 
@@ -222,7 +222,7 @@ POST /service/restart  → restart daemon (self-restart)
 ```json
 {
   "bin": {
-    "nanoclaw": "./dist/cli/index.js"
+    "jimmyclaw": "./dist/cli/index.js"
   },
   "scripts": {
     "dev": "bun run src/index.ts",
@@ -233,7 +233,7 @@ POST /service/restart  → restart daemon (self-restart)
 }
 ```
 
-Sau khi `npm install -g` hoặc `bun link`, gõ `nanoclaw` từ bất kỳ đâu.
+Sau khi `npm install -g` hoặc `bun link`, gõ `jimmyclaw` từ bất kỳ đâu.
 
 ---
 
@@ -242,7 +242,7 @@ Sau khi `npm install -g` hoặc `bun link`, gõ `nanoclaw` từ bất kỳ đâu
 ### Thêm agent mới (interactive)
 
 ```
-$ nanoclaw agent add
+$ jimmyclaw agent add
 
 ? Agent ID (tên): duc
 ? Role: (dùng mũi tên)
@@ -266,7 +266,7 @@ $ nanoclaw agent add
 ### Xem logs realtime
 
 ```
-$ nanoclaw logs --agent duc --level info
+$ jimmyclaw logs --agent duc --level info
 
 [10:32:01] INFO  duc  Received task: write GraphQL example
 [10:32:02] INFO  duc  Using model: glm-5
@@ -278,7 +278,7 @@ $ nanoclaw logs --agent duc --level info
 ### Config interactive
 
 ```
-$ nanoclaw config edit
+$ jimmyclaw config edit
 
 Current settings:
   maxParallelTasks:     4

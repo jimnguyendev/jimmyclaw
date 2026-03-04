@@ -1,13 +1,13 @@
-# NanoClaw Memory Architecture
+# JimmyClaw Memory Architecture
 
 > **Status:** Public draft — v1.0, 2026-03
-> This document describes the memory subsystem of NanoClaw and positions it against the current state of the art in personal AI assistant memory architectures.
+> This document describes the memory subsystem of JimmyClaw and positions it against the current state of the art in personal AI assistant memory architectures.
 
 ---
 
 ## Overview
 
-NanoClaw implements a **tri-hybrid, graph-augmented memory system** running entirely on a single SQLite database (Bun native `bun:sqlite`). No external vector databases, no graph servers, no cloud dependencies. The system provides:
+JimmyClaw implements a **tri-hybrid, graph-augmented memory system** running entirely on a single SQLite database (Bun native `bun:sqlite`). No external vector databases, no graph servers, no cloud dependencies. The system provides:
 
 - **BM25 keyword search** (SQLite FTS5)
 - **Semantic vector search** (cosine similarity over stored embeddings)
@@ -24,7 +24,7 @@ All components run inside an isolated container per user group, with zero shared
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    NANOCLAW MEMORY SYSTEM                        │
+│                    JIMMYCLAW MEMORY SYSTEM                        │
 │                                                                  │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │                  WRITE PATH                               │   │
@@ -101,7 +101,7 @@ All components run inside an isolated container per user group, with zero shared
 
 ## Memory Types
 
-NanoClaw distinguishes three memory categories, each with different storage and retrieval characteristics:
+JimmyClaw distinguishes three memory categories, each with different storage and retrieval characteristics:
 
 ### 1. Working Memory (Context Window)
 
@@ -136,8 +136,8 @@ All files are chunked (400 tokens, 80-token overlap), embedded, and stored in SQ
 Entities and relationships extracted from conversations and stored in the KG subsystem:
 
 ```
-kg_nodes     → Jimmy Nguyen [person], NanoClaw [project]
-kg_edges     → Jimmy → NanoClaw: "builds", Jimmy → Anthropic: "uses API of"
+kg_nodes     → Jimmy Nguyen [person], JimmyClaw [project]
+kg_edges     → Jimmy → JimmyClaw: "builds", Jimmy → Anthropic: "uses API of"
 kg_aliases   → "Jim" → Jimmy Nguyen
 kg_chunk_mentions → entity ↔ document chunk (bidirectional index)
 ```
@@ -245,7 +245,7 @@ The entire memory system — BM25 index, vector embeddings, knowledge graph, cac
 
 ### 2. Agent-Driven Entity Extraction
 
-NanoClaw does **not** run an LLM extraction pass during memory ingestion. Instead, agents are responsible for calling `memory_kg_index` when they learn new entities or relationships.
+JimmyClaw does **not** run an LLM extraction pass during memory ingestion. Instead, agents are responsible for calling `memory_kg_index` when they learn new entities or relationships.
 
 This separation:
 - Eliminates hidden LLM cost during indexing
@@ -256,7 +256,7 @@ This pattern is adapted from kioku-agent-kit-lite's "agents extract, storage onl
 
 ### 3. RRF Over Weighted Averaging
 
-Earlier versions of NanoClaw used a weighted average of normalized BM25 and vector scores. RRF is superior because:
+Earlier versions of JimmyClaw used a weighted average of normalized BM25 and vector scores. RRF is superior because:
 
 - **Scale-agnostic**: BM25 scores and cosine similarities have incompatible scales; RRF requires no normalization.
 - **Natural ensemble**: Documents appearing in multiple lists are rewarded multiplicatively without explicit weight tuning.
@@ -270,11 +270,11 @@ Each user group (WhatsApp group, Telegram group, etc.) has its own SQLite databa
 
 ## Comparison with Other Systems
 
-### NanoClaw vs. OpenClaw
+### JimmyClaw vs. OpenClaw
 
-OpenClaw's community architecture (coolmanns/openclaw-memory-architecture) describes a 12-layer system with activation decay, domain RAG, and a QMD reranker. NanoClaw and OpenClaw share similar philosophical goals (small, local-first, Markdown-centric) but differ in approach:
+OpenClaw's community architecture (coolmanns/openclaw-memory-architecture) describes a 12-layer system with activation decay, domain RAG, and a QMD reranker. JimmyClaw and OpenClaw share similar philosophical goals (small, local-first, Markdown-centric) but differ in approach:
 
-| Dimension | NanoClaw | OpenClaw (community arch.) |
+| Dimension | JimmyClaw | OpenClaw (community arch.) |
 |-----------|---------|--------------------------|
 | **Storage** | Single SQLite per group | SQLite + separate sqlite-vec + Markdown files |
 | **Search** | BM25 + Vector + Graph → RRF | FTS5 + Vector + QMD reranker (tiered) |
@@ -286,13 +286,13 @@ OpenClaw's community architecture (coolmanns/openclaw-memory-architecture) descr
 | **Dependencies** | Zero (Bun native SQLite) | sqlite-vec extension + separate processes |
 | **Multi-group isolation** | OS-level (container) | Application-level |
 
-OpenClaw's tiered activation model (inspired by cognitive spreading activation theory) is more sophisticated for long-running single-user deployments. NanoClaw's approach is simpler but more maintainable and requires no cron jobs.
+OpenClaw's tiered activation model (inspired by cognitive spreading activation theory) is more sophisticated for long-running single-user deployments. JimmyClaw's approach is simpler but more maintainable and requires no cron jobs.
 
-### NanoClaw vs. Mem0
+### JimmyClaw vs. Mem0
 
 Mem0 is the leading production memory library as of 2025. Key differences:
 
-| Dimension | NanoClaw | Mem0 |
+| Dimension | JimmyClaw | Mem0 |
 |-----------|---------|------|
 | **Storage** | SQLite (embedded) | External vector DB (Qdrant, Pinecone, etc.) + optional Neo4j |
 | **Graph search** | BFS with hub-node capping | BFS traversal (Neo4j BoltDB) |
@@ -305,13 +305,13 @@ Mem0 is the leading production memory library as of 2025. Key differences:
 | **Deployment** | Self-hosted, single process | Cloud SDK or self-hosted with external DBs |
 | **Cost at 1M queries** | ~$0 (no API) | External DB costs + LLM extraction per write |
 
-NanoClaw trades Mem0's automatic memory management for lower cost and zero external dependencies. For personal use at low-to-medium volume, SQLite's throughput (100K+ reads/sec) is more than sufficient.
+JimmyClaw trades Mem0's automatic memory management for lower cost and zero external dependencies. For personal use at low-to-medium volume, SQLite's throughput (100K+ reads/sec) is more than sufficient.
 
-### NanoClaw vs. Zep / Graphiti
+### JimmyClaw vs. Zep / Graphiti
 
 Zep represents the current state of the art in temporal knowledge graph memory. It is primarily an enterprise/production system:
 
-| Dimension | NanoClaw | Zep |
+| Dimension | JimmyClaw | Zep |
 |-----------|---------|-----|
 | **Storage** | SQLite | Knowledge graph (Neo4j-compatible) + Lucene |
 | **Search** | BM25 + Vector + Graph → RRF + MMR | BM25 + Cosine + BFS → RRF + MMR + cross-encoder |
@@ -324,15 +324,15 @@ Zep represents the current state of the art in temporal knowledge graph memory. 
 | **Open source** | Yes (MIT) | Yes (Apache 2.0) |
 | **Scale** | Personal / small team | Enterprise |
 
-NanoClaw now implements **bi-temporal modeling** on the knowledge graph, closing the biggest gap with Zep. Every `kg_edges` row carries four timestamps: `valid_from`/`valid_until` (T timeline — when the fact was true in the real world) and `known_from`/`known_until` (T' timeline — when the system recorded or retracted the fact). This allows answering "what relationships existed on 2024-11-01?" (`memory_kg_timeline mode=as_of`) and "what did we believe last Tuesday?" (`memory_kg_timeline mode=as_known_at`).
+JimmyClaw now implements **bi-temporal modeling** on the knowledge graph, closing the biggest gap with Zep. Every `kg_edges` row carries four timestamps: `valid_from`/`valid_until` (T timeline — when the fact was true in the real world) and `known_from`/`known_until` (T' timeline — when the system recorded or retracted the fact). This allows answering "what relationships existed on 2024-11-01?" (`memory_kg_timeline mode=as_of`) and "what did we believe last Tuesday?" (`memory_kg_timeline mode=as_known_at`).
 
-The remaining Zep advantage is **community/cluster subgraph summaries** — Zep periodically clusters the graph and builds higher-order summaries. NanoClaw's graph is flat (no clustering).
+The remaining Zep advantage is **community/cluster subgraph summaries** — Zep periodically clusters the graph and builds higher-order summaries. JimmyClaw's graph is flat (no clustering).
 
-### NanoClaw vs. MemoryOS
+### JimmyClaw vs. MemoryOS
 
 MemoryOS is an academic architecture (EMNLP 2025 Oral) proposing an OS-inspired three-tier memory model. It is not a deployable system but a research framework:
 
-| Dimension | NanoClaw | MemoryOS |
+| Dimension | JimmyClaw | MemoryOS |
 |-----------|---------|---------|
 | **Tiers** | 2 (working + indexed) | 3 (STM/MTM/LTM, OS analogy) |
 | **Eviction policy** | Temporal decay | Heat-based (N_visit + L_interaction + R_recency) |
@@ -342,7 +342,7 @@ MemoryOS is an academic architecture (EMNLP 2025 Oral) proposing an OS-inspired 
 | **Benchmark** | Not evaluated | +49.11% F1 on LoCoMo |
 | **Deployable** | Yes | Research prototype |
 
-MemoryOS's heat-based eviction is a more principled approach to forgetting than NanoClaw's time-based decay. The 90-dimension personality trait model is a unique capability NanoClaw does not have.
+MemoryOS's heat-based eviction is a more principled approach to forgetting than JimmyClaw's time-based decay. The 90-dimension personality trait model is a unique capability JimmyClaw does not have.
 
 ---
 
@@ -352,7 +352,7 @@ MemoryOS's heat-based eviction is a more principled approach to forgetting than 
                     Simplicity / Deployability
                               ▲
                               │
-                   NanoClaw ──●── Zero external deps, single SQLite
+                   JimmyClaw ──●── Zero external deps, single SQLite
                               │   BM25 + Vector + Graph KG → RRF
                               │   Personal / small team scale
                               │
@@ -372,7 +372,7 @@ MemoryOS's heat-based eviction is a more principled approach to forgetting than 
                   Richness / Production Scale
 ```
 
-### What NanoClaw does uniquely well
+### What JimmyClaw does uniquely well
 
 1. **Zero-dependency hybrid search in a single file.** No other open-source personal AI assistant implements BM25 + vector + knowledge graph search in a single SQLite database with no external services.
 
@@ -380,7 +380,7 @@ MemoryOS's heat-based eviction is a more principled approach to forgetting than 
 
 3. **Agent-explicit knowledge graph.** The agent decides what enters the KG — no hidden LLM extraction pass, no opaque memory side effects. The graph is auditable by humans.
 
-4. **RRF with graph as first-class signal.** Unlike Mem0 (where graph is supplementary) and OpenClaw (where graph is a separate plugin), NanoClaw's RRF treats BM25, vector, and graph as equal peers.
+4. **RRF with graph as first-class signal.** Unlike Mem0 (where graph is supplementary) and OpenClaw (where graph is a separate plugin), JimmyClaw's RRF treats BM25, vector, and graph as equal peers.
 
 5. **Runtime-tunable scoring.** All search parameters are configurable at runtime via MCP tool without restarting the server, enabling in-context experimentation.
 
@@ -390,7 +390,7 @@ MemoryOS's heat-based eviction is a more principled approach to forgetting than 
 |-----|--------------|---------|
 | ~~Bi-temporal modeling~~ | ~~Zep~~ | **Implemented** — T and T' timelines on KG edges |
 | Automatic contradiction resolution | Mem0 | Low — manual curation is safer |
-| Personality trait extraction | MemoryOS | Low — not a goal for NanoClaw |
+| Personality trait extraction | MemoryOS | Low — not a goal for JimmyClaw |
 | Community/cluster subgraph summaries | Zep | Medium — scales graph to large deployments |
 | Principled eviction (heat-based) | MemoryOS | Medium — current decay is time-only |
 | Benchmark evaluation | All | High — no public evaluation of this system yet |

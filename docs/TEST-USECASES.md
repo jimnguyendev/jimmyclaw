@@ -1,4 +1,4 @@
-# NanoClaw Swarm - Test Use Cases
+# JimmyClaw Swarm - Test Use Cases
 
 ## Chuẩn bị
 
@@ -9,7 +9,7 @@ chmod +x test-swarm.sh
 ./test-swarm.sh check
 ```
 
-### 2. Start NanoClaw
+### 2. Start JimmyClaw
 ```bash
 # Enable swarm mode
 export SWARM_ENABLED=true
@@ -239,7 +239,7 @@ which opencode
 opencode run -m zai-coding-plan/glm-4.7-flash "Hello"
 
 # Check logs
-cat store/logs/nanoclaw.log | tail -50
+cat store/logs/jimmyclaw.log | tail -50
 ```
 
 ### Issue: Swarm không enable
@@ -258,7 +258,7 @@ cat data/swarm-config.json
 
 # Reset
 rm data/swarm-config.json
-# Restart NanoClaw
+# Restart JimmyClaw
 ```
 
 ---
@@ -266,7 +266,7 @@ rm data/swarm-config.json
 ## Test Checklist
 
 - [ ] OpenCode CLI working (`./test-swarm.sh quick`)
-- [ ] NanoClaw starts without errors
+- [ ] JimmyClaw starts without errors
 - [ ] `/swarm status` shows agents
 - [ ] `/swarm agents` lists all agents
 - [ ] Can add new agent

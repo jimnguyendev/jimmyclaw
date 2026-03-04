@@ -38,7 +38,7 @@ export function startApiServer(deps: {
   messenger: Messenger;
 }) {
   const server = Bun.listen({
-    unix: SOCKET_PATH,   // store/nanoclaw.sock
+    unix: SOCKET_PATH,   // store/jimmyclaw.sock
     socket: {
       data(socket, data) {
         const req = JSON.parse(data.toString());
@@ -71,10 +71,10 @@ POST /service/restart
 
 **Files sửa:**
 - `src/index.ts` — khởi động `startApiServer()` sau khi init xong
-- `src/config.ts` — thêm `SOCKET_PATH = path.join(STORE_DIR, 'nanoclaw.sock')`
+- `src/config.ts` — thêm `SOCKET_PATH = path.join(STORE_DIR, 'jimmyclaw.sock')`
 
 **Acceptance criteria:**
-- [ ] `echo '{"method":"GET","path":"/status"}' | nc -U store/nanoclaw.sock` trả về JSON
+- [ ] `echo '{"method":"GET","path":"/status"}' | nc -U store/jimmyclaw.sock` trả về JSON
 - [ ] Socket file được tạo khi daemon start
 - [ ] Socket bị xóa khi daemon stop (cleanup on exit)
 
@@ -87,7 +87,7 @@ POST /service/restart
 ```typescript
 import { program } from 'commander';
 
-program.name('nanoclaw').version('2.0.0');
+program.name('jimmyclaw').version('2.0.0');
 
 program.command('status').action(statusCmd);
 program.command('agents').action(agentsCmd);
@@ -138,7 +138,7 @@ export class ApiClient {
 **package.json thêm:**
 ```json
 {
-  "bin": { "nanoclaw": "./dist/cli/index.js" },
+  "bin": { "jimmyclaw": "./dist/cli/index.js" },
   "scripts": {
     "build:cli": "bun build src/cli/index.ts --outdir dist/cli --target bun"
   },
@@ -149,10 +149,10 @@ export class ApiClient {
 ```
 
 **Acceptance criteria:**
-- [ ] `nanoclaw status` in ra bảng có uptime, agents, task count
-- [ ] `nanoclaw agents` in danh sách agents với model và status
-- [ ] `nanoclaw agent add nam leader claude-sonnet` thêm agent thành công
-- [ ] `nanoclaw logs` tail log realtime
+- [ ] `jimmyclaw status` in ra bảng có uptime, agents, task count
+- [ ] `jimmyclaw agents` in danh sách agents với model và status
+- [ ] `jimmyclaw agent add nam leader claude-sonnet` thêm agent thành công
+- [ ] `jimmyclaw logs` tail log realtime
 - [ ] Tất cả commands có `--json` flag cho scripting
 
 ---
@@ -162,9 +162,9 @@ export class ApiClient {
 **Thêm vào commands khi thiếu argument:**
 
 ```bash
-nanoclaw agent add          # ← không có args → interactive
-nanoclaw agent add duc      # ← thiếu role → hỏi tiếp
-nanoclaw agent add duc coder glm-5  # ← đủ args → direct
+jimmyclaw agent add          # ← không có args → interactive
+jimmyclaw agent add duc      # ← thiếu role → hỏi tiếp
+jimmyclaw agent add duc coder glm-5  # ← đủ args → direct
 ```
 
 **Dependencies:**
@@ -197,9 +197,9 @@ export async function promptNewAgent(partial: Partial<AgentArgs>) {
 ```
 
 **Acceptance criteria:**
-- [ ] `nanoclaw agent add` không args → hỏi từng bước, validate input
-- [ ] `nanoclaw config edit` → select key → nhập value → confirm → apply
-- [ ] `nanoclaw env set` → prompt nếu không có args
+- [ ] `jimmyclaw agent add` không args → hỏi từng bước, validate input
+- [ ] `jimmyclaw config edit` → select key → nhập value → confirm → apply
+- [ ] `jimmyclaw env set` → prompt nếu không có args
 
 ---
 
@@ -272,7 +272,7 @@ export function useAgents() {
 ```
 
 **Acceptance criteria:**
-- [ ] `nanoclaw` không args → TUI hiện ra
+- [ ] `jimmyclaw` không args → TUI hiện ra
 - [ ] Agents panel show status realtime (idle/busy)
 - [ ] Activity panel stream log mới nhất
 - [ ] Tasks panel show pending/processing tasks

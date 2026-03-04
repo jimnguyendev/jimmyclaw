@@ -232,7 +232,7 @@ async function hybridSearch(query: string, limit: number): Promise<SearchResult[
 ### Decision 3: MCP Server Architecture
 - **Chosen**: Separate MCP server process
 - **Alternatives**: In-process SDK tools
-- **Rationale**: Isolation, reusability, follows NanoClaw patterns
+- **Rationale**: Isolation, reusability, follows JimmyClaw patterns
 
 ### Decision 4: Hybrid Search Weights
 - **Chosen**: 70% vector, 30% BM25

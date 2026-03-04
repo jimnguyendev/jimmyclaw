@@ -1,4 +1,4 @@
-# NanoClaw — Hướng Dẫn Sử Dụng
+# JimmyClaw — Hướng Dẫn Sử Dụng
 
 > Phiên bản: 1.1+ | Cập nhật: 2026-03
 
@@ -21,7 +21,7 @@
 
 ## 1. Tổng Quan Hệ Thống
 
-NanoClaw là một AI assistant cá nhân chạy trên một tiến trình Bun duy nhất. Các AI agent chạy bên trong container Linux được cô lập hoàn toàn (Apple Container trên macOS, Docker trên Linux).
+JimmyClaw là một AI assistant cá nhân chạy trên một tiến trình Bun duy nhất. Các AI agent chạy bên trong container Linux được cô lập hoàn toàn (Apple Container trên macOS, Docker trên Linux).
 
 ### Kiến trúc tóm tắt
 
@@ -30,7 +30,7 @@ Người dùng (WhatsApp / Telegram / Discord)
         │
         ▼
  ┌─────────────────────────────────────┐
- │         NanoClaw Daemon (Bun)       │
+ │         JimmyClaw Daemon (Bun)       │
  │                                     │
  │  ┌──────────┐   ┌────────────────┐  │
  │  │ Channel  │   │  Orchestrator  │  │
@@ -61,7 +61,7 @@ Người dùng (WhatsApp / Telegram / Discord)
 | **Team Channel** | Discord/Telegram channel nơi agents giao tiếp như team thực |
 | **RAG Memory** | Tìm kiếm hybrid (BM25 + vector) trên memory files của từng group |
 | **Task Queue** | SQLite-backed, hỗ trợ parallel execution với timeout |
-| **CLI** | `nanoclaw` command để quản lý daemon, agents, config, logs |
+| **CLI** | `jimmyclaw` command để quản lý daemon, agents, config, logs |
 
 ---
 
@@ -115,8 +115,8 @@ sudo usermod -aG docker $USER
 ### Bước 1: Clone và mở Claude Code
 
 ```bash
-git clone https://github.com/qwibitai/NanoClaw.git
-cd NanoClaw
+git clone https://github.com/qwibitai/JimmyClaw.git
+cd JimmyClaw
 claude
 ```
 
@@ -144,17 +144,17 @@ Claude sẽ tự động:
 ### Bước 4: Khởi động daemon
 
 ```bash
-nanoclaw start
-nanoclaw status
+jimmyclaw start
+jimmyclaw status
 ```
 
 Hoặc qua service:
 ```bash
 # macOS
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+launchctl kickstart -k gui/$(id -u)/com.jimmyclaw
 
 # Linux
-systemctl --user start nanoclaw
+systemctl --user start jimmyclaw
 ```
 
 ---
@@ -217,23 +217,23 @@ INSTANCE_AGENTS=andy,sarah
 
 ```bash
 # Xem config hiện tại
-nanoclaw config
+jimmyclaw config
 
 # Sửa một field
-nanoclaw config set maxParallelTasks 6
+jimmyclaw config set maxParallelTasks 6
 
 # Reload config (không cần restart daemon)
-nanoclaw config reload
+jimmyclaw config reload
 
 # Reset về mặc định
-nanoclaw config reset
+jimmyclaw config reset
 ```
 
 ---
 
 ## 5. CLI Dashboard
 
-`nanoclaw` là công cụ quản lý daemon từ terminal.
+`jimmyclaw` là công cụ quản lý daemon từ terminal.
 
 ### Cài đặt CLI
 
@@ -246,7 +246,7 @@ npm run build
 
 Thêm vào PATH:
 ```bash
-echo 'alias nanoclaw="bun /path/to/nanoclaw/src/cli/index.ts"' >> ~/.zshrc
+echo 'alias jimmyclaw="bun /path/to/jimmyclaw/src/cli/index.ts"' >> ~/.zshrc
 ```
 
 ### Các lệnh chính
@@ -254,16 +254,16 @@ echo 'alias nanoclaw="bun /path/to/nanoclaw/src/cli/index.ts"' >> ~/.zshrc
 #### Daemon management
 
 ```bash
-nanoclaw start              # Start daemon
-nanoclaw stop               # Stop daemon
-nanoclaw restart            # Restart daemon
-nanoclaw status             # Xem trạng thái tổng quan
-nanoclaw status --json      # Output JSON (cho scripting)
+jimmyclaw start              # Start daemon
+jimmyclaw stop               # Stop daemon
+jimmyclaw restart            # Restart daemon
+jimmyclaw status             # Xem trạng thái tổng quan
+jimmyclaw status --json      # Output JSON (cho scripting)
 ```
 
 Output ví dụ:
 ```
-● NanoClaw running
+● JimmyClaw running
   Uptime: 2h 34m
   Memory: 128 MB / 512 MB
   Agents: 4
@@ -275,78 +275,78 @@ Output ví dụ:
 
 ```bash
 # Xem danh sách agents
-nanoclaw agent list
+jimmyclaw agent list
 
 # Thêm agent mới (interactive)
-nanoclaw agent add
-nanoclaw agent add --id lisa --role writer --model glm-4.7-flash
+jimmyclaw agent add
+jimmyclaw agent add --id lisa --role writer --model glm-4.7-flash
 
 # Đổi model
-nanoclaw agent model sarah glm-5
+jimmyclaw agent model sarah glm-5
 
 # Sửa system prompt
-nanoclaw agent prompt mike
+jimmyclaw agent prompt mike
 
 # Đổi tên agent
-nanoclaw agent rename andy boss
+jimmyclaw agent rename andy boss
 
 # Xóa agent
-nanoclaw agent remove lisa
+jimmyclaw agent remove lisa
 ```
 
 #### Task management
 
 ```bash
 # Xem tất cả tasks
-nanoclaw tasks
+jimmyclaw tasks
 
 # Xem chi tiết một task
-nanoclaw task <task-id>
+jimmyclaw task <task-id>
 ```
 
 #### Logs
 
 ```bash
 # Xem 50 dòng log gần nhất
-nanoclaw logs
+jimmyclaw logs
 
 # Xem 200 dòng
-nanoclaw logs --lines 200
+jimmyclaw logs --lines 200
 
 # Filter theo agent
-nanoclaw logs --agent sarah
+jimmyclaw logs --agent sarah
 
 # Filter theo level
-nanoclaw logs --level error
+jimmyclaw logs --level error
 
 # Follow realtime (như tail -f)
-nanoclaw logs --follow
-nanoclaw logs -f
+jimmyclaw logs --follow
+jimmyclaw logs -f
 ```
 
 #### Team channel
 
 ```bash
 # Xem cấu hình channel hiện tại
-nanoclaw channel
+jimmyclaw channel
 
 # Đổi sang Discord
-nanoclaw channel set discord --channel-id 123456789
+jimmyclaw channel set discord --channel-id 123456789
 
 # Đổi sang Telegram
-nanoclaw channel set telegram --channel-id -100123456789
+jimmyclaw channel set telegram --channel-id -100123456789
 
 # Bật/tắt channel
-nanoclaw channel enable
-nanoclaw channel disable
+jimmyclaw channel enable
+jimmyclaw channel disable
 ```
 
 ### TUI (Terminal UI)
 
-Chạy `nanoclaw` không có argument để mở TUI dashboard:
+Chạy `jimmyclaw` không có argument để mở TUI dashboard:
 
 ```bash
-nanoclaw
+jimmyclaw
 ```
 
 TUI hiển thị:
@@ -416,8 +416,8 @@ Mỗi role được định nghĩa trong `config/agent-swarm.json`:
 
 Sau đó thêm agent với role mới:
 ```bash
-nanoclaw agent add --id ops-bot --role devops --model glm-4.7-flash
-nanoclaw config reload
+jimmyclaw agent add --id ops-bot --role devops --model glm-4.7-flash
+jimmyclaw config reload
 ```
 
 ### Task classification tự động
@@ -465,9 +465,9 @@ Chuột phải vào channel → Copy Channel ID.
 **Bước 4: Kích hoạt**
 
 ```bash
-nanoclaw channel set discord --channel-id YOUR_CHANNEL_ID
-nanoclaw channel enable
-nanoclaw config reload
+jimmyclaw channel set discord --channel-id YOUR_CHANNEL_ID
+jimmyclaw channel enable
+jimmyclaw config reload
 ```
 
 Hoặc thông qua `/add-discord` skill trong Claude Code.
@@ -523,7 +523,7 @@ Người dùng reply trong channel → agent tiếp tục với câu trả lời
 
 **Cài đặt:**
 ```bash
-git clone ... && cd NanoClaw
+git clone ... && cd JimmyClaw
 claude
 /setup   # Chọn WhatsApp
 ```
@@ -546,8 +546,8 @@ claude
 **Cài đặt:**
 ```bash
 # Setup basic + thêm Discord channel
-nanoclaw channel set discord --channel-id CHANNEL_ID
-nanoclaw channel enable
+jimmyclaw channel set discord --channel-id CHANNEL_ID
+jimmyclaw channel enable
 
 # Agents: Andy (leader), Sarah (research), Mike (code), Emma (review)
 # Đã có sẵn trong config mặc định
@@ -626,8 +626,8 @@ Always check MEMORY.md for recent decisions before answering.
 ```
 
 ```bash
-nanoclaw agent add --id lisa --role writer --model glm-4.7-flash
-nanoclaw config reload
+jimmyclaw agent add --id lisa --role writer --model glm-4.7-flash
+jimmyclaw config reload
 ```
 
 **Workflow:**
@@ -677,16 +677,16 @@ DISCORD_BOT_TOKEN_SARAH=...
 DISCORD_BOT_TOKEN_MIKE=...
 ```
 
-Cả hai VPS kết nối vào cùng một Discord/Telegram channel. Andy gửi `[nanoclaw:assign]` message → Sarah trên VPS-02 nhận và xử lý → post kết quả → Andy nhận.
+Cả hai VPS kết nối vào cùng một Discord/Telegram channel. Andy gửi `[jimmyclaw:assign]` message → Sarah trên VPS-02 nhận và xử lý → post kết quả → Andy nhận.
 
 **Deploy:**
 ```bash
 # Trên cả hai VPS
-git clone ... && cd NanoClaw
+git clone ... && cd JimmyClaw
 cp .env.example .env
 # Sửa INSTANCE_ID và INSTANCE_AGENTS tương ứng
 bun install
-nanoclaw start
+jimmyclaw start
 ```
 
 ---
@@ -702,7 +702,7 @@ nanoclaw start
 @Andy mỗi ngày 9am, kiểm tra uptime của server và báo cáo
 ```
 
-NanoClaw lưu tasks vào SQLite scheduler và tự động execute theo lịch.
+JimmyClaw lưu tasks vào SQLite scheduler và tự động execute theo lịch.
 
 ---
 
@@ -726,8 +726,8 @@ Discord hoặc Telegram — cả team dùng cùng một kênh.
 
 ```bash
 # Trên mỗi VPS
-git clone https://github.com/qwibitai/NanoClaw.git nanoclaw-vps01
-cd nanoclaw-vps01
+git clone https://github.com/qwibitai/JimmyClaw.git jimmyclaw-vps01
+cd jimmyclaw-vps01
 nano .env
 ```
 
@@ -738,8 +738,8 @@ INSTANCE_ID=vps-01
 INSTANCE_AGENTS=andy,emma
 DISCORD_BOT_TOKEN_ANDY=...
 DISCORD_BOT_TOKEN_EMMA=...
-NANOCLAW_CHANNEL_PLATFORM=discord
-NANOCLAW_CHANNEL_ID=123456789
+JIMMYCLAW_CHANNEL_PLATFORM=discord
+JIMMYCLAW_CHANNEL_ID=123456789
 ```
 
 **Bước 4: Cấu hình `config/agent-swarm.json`**
@@ -758,13 +758,13 @@ Trong `instance.localAgents`, chỉ liệt kê agents của instance đó:
 
 ```bash
 bun install && npm run build
-nanoclaw start
-nanoclaw status
+jimmyclaw start
+jimmyclaw status
 ```
 
 **Kiểm tra hoạt động:**
 ```bash
-nanoclaw logs -f
+jimmyclaw logs -f
 # Bạn sẽ thấy: "Channel messenger initialized"
 # Và khi có task: "Assigning subtask via channel" (remote) vs "Assigning subtask locally"
 ```
@@ -776,11 +776,11 @@ nanoclaw logs -f
 ### Daemon không start
 
 ```bash
-nanoclaw status
+jimmyclaw status
 # Nếu: "Daemon không chạy"
 
 # Kiểm tra logs
-nanoclaw logs --lines 50
+jimmyclaw logs --lines 50
 
 # Thử start thủ công (xem error trực tiếp)
 bun src/index.ts
@@ -788,30 +788,30 @@ bun src/index.ts
 
 Lỗi thường gặp:
 - `Missing ANTHROPIC_API_KEY` → Kiểm tra `.env`
-- `Socket already in use` → `rm -f store/nanoclaw.sock && nanoclaw start`
+- `Socket already in use` → `rm -f store/jimmyclaw.sock && jimmyclaw start`
 - `Container not found` → `./container/build.sh`
 
 ### Agent không respond
 
 ```bash
 # Kiểm tra agent đang busy hay idle
-nanoclaw agent list
+jimmyclaw agent list
 
 # Xem log của agent cụ thể
-nanoclaw logs --agent sarah
+jimmyclaw logs --agent sarah
 
 # Nếu agent bị stuck, restart daemon
-nanoclaw restart
+jimmyclaw restart
 ```
 
 ### Team channel không hoạt động
 
 ```bash
 # Kiểm tra config
-nanoclaw channel
+jimmyclaw channel
 
 # Kiểm tra bot tokens
-nanoclaw logs | grep "bot token\|Missing bot\|Channel messenger"
+jimmyclaw logs | grep "bot token\|Missing bot\|Channel messenger"
 ```
 
 Lỗi thường gặp:
@@ -824,7 +824,7 @@ Lỗi thường gặp:
 Task mặc định timeout sau 5 phút. Để tăng:
 
 ```bash
-nanoclaw config set taskTimeoutMs 600000  # 10 phút
+jimmyclaw config set taskTimeoutMs 600000  # 10 phút
 # Hoặc per-agent trong config/agent-swarm.json:
 # "timeoutMs": 600000
 ```
@@ -833,19 +833,19 @@ nanoclaw config set taskTimeoutMs 600000  # 10 phút
 
 ```bash
 # Logs realtime với filter error
-nanoclaw logs -f --level error
+jimmyclaw logs -f --level error
 
 # Hoặc debug mode
-DEBUG=* nanoclaw start
+DEBUG=* jimmyclaw start
 ```
 
 ### Reset hoàn toàn
 
 ```bash
-nanoclaw stop
-rm -f store/nanoclaw.sock
-rm -f store/nanoclaw.db    # CẢNH BÁO: xóa toàn bộ task history và memory
-nanoclaw start
+jimmyclaw stop
+rm -f store/jimmyclaw.sock
+rm -f store/jimmyclaw.db    # CẢNH BÁO: xóa toàn bộ task history và memory
+jimmyclaw start
 ```
 
 ---
@@ -862,4 +862,4 @@ nanoclaw start
 
 ---
 
-*Tài liệu này được viết cho NanoClaw v1.1+. Nếu gặp vấn đề không có trong guide, hãy dùng `/debug` trong Claude Code hoặc hỏi trong Discord.*
+*Tài liệu này được viết cho JimmyClaw v1.1+. Nếu gặp vấn đề không có trong guide, hãy dùng `/debug` trong Claude Code hoặc hỏi trong Discord.*

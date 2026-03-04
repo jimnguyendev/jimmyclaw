@@ -10,7 +10,7 @@ description: Technical architecture for multi-agent team coordination
 
 ```mermaid
 graph TB
-    subgraph "NanoClaw Swarm System"
+    subgraph "JimmyClaw Swarm System"
         subgraph "Communication Layer"
             MB[Message Bus<br/>SQLite + HTTP]
             SM[Shared Memory<br/>SQLite]
@@ -70,7 +70,7 @@ graph TB
 |-------|------------|-----------|
 | **Database** | SQLite | Built-in, zero config, sufficient for single VPS |
 | **Communication** | SQLite + HTTP | Simple, reliable, no external dependencies |
-| **Agent Runtime** | Bun + TypeScript | Consistent with NanoClaw core |
+| **Agent Runtime** | Bun + TypeScript | Consistent with JimmyClaw core |
 | **Worker Models** | OpenCode CLI | Free access to Gemini, Groq, etc. |
 | **Leader Model** | Claude SDK | Best reasoning for coordination |
 
@@ -620,7 +620,7 @@ src/swarm/
 
 ## Integration Points
 
-### Existing NanoClaw Integration
+### Existing JimmyClaw Integration
 
 | File | Changes |
 |------|---------|

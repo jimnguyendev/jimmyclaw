@@ -9,7 +9,7 @@ description: Enable multiple LLM providers for flexibility, cost optimization, a
 ## Problem Statement
 **What problem are we solving?**
 
-NanoClaw hiện tại chỉ hỗ trợ Claude thông qua Claude Agent SDK. Điều này tạo ra:
+JimmyClaw hiện tại chỉ hỗ trợ Claude thông qua Claude Agent SDK. Điều này tạo ra:
 - **Vendor lock-in**: Phụ thuộc hoàn toàn vào Anthropic
 - **Single point of failure**: Khi Claude API down, toàn bộ system không hoạt động
 - **Cost inefficiency**: Không thể dùng model rẻ hơn cho task đơn giản

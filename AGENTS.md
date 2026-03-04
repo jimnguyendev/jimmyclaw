@@ -99,3 +99,39 @@ When working on this project, you can run commands to:
 - Verify implementation against design (`check-implementation`)
 - Writing tests (`writing-test`)
 - Perform structured code reviews (`code-review`)
+
+## Development
+
+**IMPORTANT: This project uses Bun.js runtime, NOT npm/node.**
+
+Always use `bun` commands instead of `npm`:
+- `bun install` instead of `npm install`
+- `bun run dev` instead of `npm run dev`
+- `bun run build` instead of `npm run build`
+- `bun test` instead of `npm test`
+- `bunx` instead of `npx`
+
+Run commands directly—don't tell the user to run them.
+
+```bash
+bun run dev          # Run with hot reload
+bun run build        # Compile TypeScript
+./container/build.sh # Rebuild agent container
+```
+
+Service management:
+```bash
+# macOS (launchd)
+launchctl load ~/Library/LaunchAgents/com.jimmyclaw.plist
+launchctl unload ~/Library/LaunchAgents/com.jimmyclaw.plist
+launchctl kickstart -k gui/$(id -u)/com.jimmyclaw  # restart
+
+# Linux (systemd)
+systemctl --user start jimmyclaw
+systemctl --user stop jimmyclaw
+systemctl --user restart jimmyclaw
+```
+
+## Container Build Cache
+
+The container buildkit caches the build context aggressively. `--no-cache` alone does NOT invalidate COPY steps — the builder's volume retains stale files. To force a truly clean rebuild, prune the builder then re-run `./container/build.sh`.

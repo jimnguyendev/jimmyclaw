@@ -3,8 +3,8 @@ import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 
 // Sentinel markers must match container-runner.ts
-const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
-const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
+const OUTPUT_START_MARKER = '---JIMMYCLAW_OUTPUT_START---';
+const OUTPUT_END_MARKER = '---JIMMYCLAW_OUTPUT_END---';
 
 // Mock config
 mock.module('./config.js', () => ({

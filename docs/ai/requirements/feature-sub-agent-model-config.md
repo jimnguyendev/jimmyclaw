@@ -9,7 +9,7 @@ description: Allow configuring different Claude models for different sub-agents
 ## Problem Statement
 **What problem are we solving?**
 
-Currently, all sub-agents in NanoClaw inherit the same model as the main agent. This is inefficient because:
+Currently, all sub-agents in JimmyClaw inherit the same model as the main agent. This is inefficient because:
 - Research tasks don't need the most capable (expensive) model
 - Code review benefits from stronger models like Opus
 - Simple tasks waste resources when using Sonnet/Opus

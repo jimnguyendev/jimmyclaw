@@ -10,7 +10,7 @@ import { SearchEngine } from './search.js';
 import { GraphSearch } from './graph.js';
 import { RAGConfig } from './types.js';
 
-const GROUP_FOLDER = process.env.NANOCLAW_GROUP_FOLDER || 'main';
+const GROUP_FOLDER = process.env.JIMMYCLAW_GROUP_FOLDER || 'main';
 const DATA_DIR = '/workspace/project/data';
 const DB_PATH = path.join(DATA_DIR, 'rag', `${GROUP_FOLDER}.sqlite`);
 

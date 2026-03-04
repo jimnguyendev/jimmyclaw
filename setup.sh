@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# setup.sh — Bootstrap script for NanoClaw
+# setup.sh — Bootstrap script for JimmyClaw
 # Handles Bun setup, then hands off to the TypeScript setup modules.
 # This is the only bash script in the setup flow.
 
@@ -99,7 +99,7 @@ elif [ "$DEPS_OK" = "false" ]; then
 fi
 
 cat <<EOF
-=== NANOCLAW SETUP: BOOTSTRAP ===
+=== JIMMYCLAW SETUP: BOOTSTRAP ===
 PLATFORM: $PLATFORM
 IS_WSL: $IS_WSL
 IS_ROOT: $IS_ROOT

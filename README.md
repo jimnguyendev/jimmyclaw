@@ -1,263 +1,509 @@
 <p align="center">
-  <img src="assets/nanoclaw-logo.png" alt="NanoClaw" width="400">
+  <img src="assets/jimmyclaw-logo.png" alt="JimmyClaw" width="400">
 </p>
 
 <p align="center">
-  An AI assistant that runs agents securely in their own containers. Lightweight, built to be easily understood and completely customized for your needs.
+  <strong>JimmyClaw</strong> — A TypeScript/Bun multi-agent AI gateway with container isolation, agent swarms, and programmable skill system.
 </p>
 
 <p align="center">
-  <a href="https://nanoclaw.dev">nanoclaw.dev</a>&nbsp; • &nbsp;
-  <a href="README_zh.md">中文</a>&nbsp; • &nbsp;
-  <a href="https://discord.gg/VDdww8qS42"><img src="https://img.shields.io/discord/1470188214710046894?label=Discord&logo=discord&v=2" alt="Discord" valign="middle"></a>&nbsp; • &nbsp;
+  <a href="https://jimmyclaw.dev">jimmyclaw.dev</a>&nbsp; • &nbsp;
   <a href="repo-tokens"><img src="repo-tokens/badge.svg" alt="34.9k tokens, 17% of context window" valign="middle"></a>
 </p>
 
-Using Claude Code, NanoClaw can dynamically rewrite its code to customize its feature set for your needs.
+[![Bun](https://img.shields.io/badge/Bun_1.2+-000000?style=flat-square&logo=bun&logoColor=white)](https://bun.sh/) [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://sqlite.org/) [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/) [![Anthropic](https://img.shields.io/badge/Anthropic-191919?style=flat-square&logo=anthropic&logoColor=white)](https://www.anthropic.com/) [![OpenAI Compatible](https://img.shields.io/badge/OpenAI_Compatible-412991?style=flat-square&logo=openai&logoColor=white)](https://openai.com/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
-**New:** First AI assistant to support [Agent Swarms](https://code.claude.com/docs/en/agent-teams). Spin up teams of agents that collaborate in your chat.
+A TypeScript/Bun port of [NanoClaw](https://github.com/qwibitai/NanoClaw) with enhanced agent orchestration, delegation system, quality gates, and a programmable skill framework.
 
-## Why I Built NanoClaw
+## What Makes It Different
 
-[OpenClaw](https://github.com/openclaw/openclaw) is an impressive project, but I wouldn't have been able to sleep if I had given complex software I didn't understand full access to my life. OpenClaw has nearly half a million lines of code, 53 config files, and 70+ dependencies. Its security is at the application level (allowlists, pairing codes) rather than true OS-level isolation. Everything runs in one Node process with shared memory.
+- **Agent Swarm Orchestration** — Teams with shared task boards, inter-agent delegation (sync/async), conversation handoff, evaluate-loop quality gates, and role-based task routing
+- **Multi-LLM Provider Support** — Anthropic, OpenAI, Gemini, DeepSeek, Groq, OpenRouter, and any OpenAI-compatible endpoint via unified provider interface
+- **Container Isolation** — Agents run in Docker/Apple Container sandboxes with filesystem isolation. Bash access is safe because commands run inside containers
+- **Channel-Based Agent Teams** — Agents can communicate via Discord/Telegram channels, each with their own bot identity
+- **Programmable Skills** — Git-based skill application with three-way merge, resolution caching, and deterministic replay
+- **Security Hardening** — Rate limiting, prompt injection detection, SSRF protection, shell deny patterns, credential scrubbing
+- **TypeScript/Bun Runtime** — Native SQLite via `bun:sqlite`, fast startup, built-in TypeScript support
 
-NanoClaw provides that same core functionality, but in a codebase small enough to understand: one process and a handful of files. Claude agents run in their own Linux containers with filesystem isolation, not merely behind permission checks.
+## Claw Ecosystem
+
+| Feature | OpenClaw | GoClaw | **JimmyClaw** |
+|---------|----------|--------|---------------|
+| Language | TypeScript | Go | **TypeScript** |
+| Runtime | Node.js | Native | **Bun** |
+| Database | PostgreSQL | PostgreSQL | **SQLite** |
+| Multi-tenant | File-based | PostgreSQL | **Per-group isolation** |
+| Agent teams | — | ✅ | ✅ |
+| Agent delegation | — | ✅ | ✅ |
+| Agent handoff | — | ✅ | ✅ |
+| Evaluate loop | — | ✅ | ✅ |
+| Quality gates | — | ✅ | ✅ |
+| Container isolation | — | ✅ | ✅ |
+| Channel-based teams | — | — | ✅ |
+| Skill system | Embeddings | BM25 + pgvector | **Git merge + rerere** |
+| Security hardening | Basic | 5-layer | **5-layer** |
+| Binary size | 28 MB + Node | ~25 MB | **~15 MB + Bun** |
+| RAM (idle) | > 1 GB | ~35 MB | **~50 MB** |
+| Startup | > 5 s | < 1 s | **< 2 s** |
+
+> **JimmyClaw unique strengths:** Channel-based agent teams (each agent has its own bot identity), programmable skill system with git merge, SQLite-based simplicity, Bun runtime performance.
+
+## Architecture
+
+```mermaid
+graph TB
+    subgraph Clients
+        TG["Telegram"]
+        DC["Discord"]
+        CLI["CLI Dashboard"]
+        API["HTTP API"]
+    end
+
+    subgraph Gateway["JimmyClaw Gateway (Bun)"]
+        direction TB
+        CM["Channel Manager"]
+        CM --> BUS["Message Bus"]
+        BUS --> Q["Group Queue<br/>(per-group concurrency)"]
+        Q --> ROUTER["Agent Router"]
+        
+        subgraph Swarm["Swarm Mode (Optional)"]
+            ORCH["Orchestrator"]
+            ORCH --> TQ["Task Queue"]
+            ORCH --> REG["Agent Registry"]
+            ORCH --> CH["Channel Messenger"]
+            ORCH --> MEM["Shared Memory"]
+        end
+        
+        ROUTER --> |"Swarm enabled"| ORCH
+        ROUTER --> |"Standard"| CONT["Container Runner"]
+        
+        CONT --> TOOLS["Built-in Tools<br/>fs · exec · web · memory · delegate"]
+        CONT --> LLM["LLM Providers<br/>Anthropic · OpenAI · Gemini · OpenRouter"]
+        
+        ORCH --> TOOLS
+        ORCH --> LLM
+    end
+
+    subgraph Storage
+        DB["SQLite<br/>(messages · sessions · tasks)"]
+        FS["File System<br/>(groups · memory · logs)"]
+    end
+
+    TG & DC --> CM
+    CLI & API --> BUS
+    CONT --> DB & FS
+    ORCH --> DB
+```
+
+## Multi-Agent Orchestration
+
+JimmyClaw supports four orchestration patterns for agent collaboration.
+
+### Agent Delegation
+
+Agent delegation enables named agents to delegate tasks to other agents — each running with its own identity, tools, and LLM provider.
+
+```mermaid
+flowchart TD
+    USER((User)) -->|"Research competitor pricing"| LEADER
+
+    subgraph TEAM["Agent Swarm"]
+        LEADER["Leader<br/>(Claude Sonnet)"]
+        RESEARCH["Researcher<br/>(GPT-4)"]
+        CODER["Coder<br/>(Claude Haiku)"]
+        REVIEWER["Reviewer<br/>(Gemini)"]
+    end
+
+    LEADER -->|"sync: wait for answer"| RESEARCH
+    RESEARCH -->|"result"| LEADER
+    LEADER -->|"async: don't wait"| CODER
+    CODER -.->|"announce when done"| LEADER
+    LEADER -->|"quality gate"| REVIEWER
+    REVIEWER -->|"approved"| LEADER
+
+    LEADER -->|"final answer"| USER
+
+    style USER fill:#e1f5fe
+    style LEADER fill:#fff3e0
+    style RESEARCH fill:#e8f5e9
+    style CODER fill:#f3e5f5
+    style REVIEWER fill:#ffebee
+```
+
+| Mode | How it works | Best for |
+|------|-------------|----------|
+| **Sync** | Agent A asks Agent B and **waits** for the answer | Quick lookups, fact checks |
+| **Async** | Agent A asks Agent B and **moves on**. B announces the result later | Long tasks, reports, deep analysis |
+
+**Permission Links** — Agents communicate through explicit `agent_links` with access control:
+
+```yaml
+# In swarm-config.yaml
+agent_links:
+  - source: leader
+    target: researcher
+    direction: outbound
+    max_concurrent: 3
+```
+
+### Channel-Based Agent Teams
+
+Agents can communicate via Discord/Telegram channels, each with their own bot identity:
+
+```mermaid
+flowchart LR
+    subgraph Local["Local Instance"]
+        LEADER["Leader Agent"]
+        RESEARCH["Researcher Agent"]
+    end
+    
+    subgraph Channel["Team Channel (Discord/Telegram)"]
+        BOT1["@leader-bot"]
+        BOT2["@researcher-bot"]
+    end
+    
+    LEADER <-->|"API"| BOT1
+    RESEARCH <-->|"API"| BOT2
+    BOT1 -->|"@researcher-bot [task]"| BOT2
+    BOT2 -->|"@leader-bot [done] result"| BOT1
+```
+
+- **Multi-bot identity** — Each agent has its own bot token
+- **Human observable** — Watch agents collaborate in real-time
+- **Human interruptible** — Send `stop` commands to cancel tasks
+
+### Evaluate Loop
+
+The evaluate loop orchestrates a generator-evaluator feedback cycle:
+
+```mermaid
+flowchart LR
+    TASK["Task + Criteria"] --> GEN["Generator<br/>Agent"]
+    GEN -->|"output"| EVAL{"Evaluator<br/>Agent"}
+    EVAL -->|"APPROVED"| RESULT["Final Output"]
+    EVAL -->|"REJECTED + feedback"| GEN
+```
+
+### Quality Gates
+
+Quality gates validate agent output before it reaches users:
+
+```yaml
+quality_gates:
+  - event: delegation.completed
+    type: agent
+    agent: reviewer
+    block_on_failure: true
+    max_retries: 2
+```
+
+## Features
+
+### LLM Providers
+- **Multi-provider support** — Anthropic, OpenAI, Gemini, DeepSeek, Groq, OpenRouter, and any OpenAI-compatible endpoint
+- **Streaming support** — Real-time response streaming to channels
+- **Fallback chains** — Automatic fallback to cheaper models on failure
+- **Model selection by role** — Researcher uses Haiku, Reviewer uses Opus
+
+### Agent Orchestration
+- **Agent loop** — Think-act-observe cycle with tool use and session history
+- **Role-based routing** — Tasks automatically routed to appropriate agent by role
+- **Task planning** — Complex tasks decomposed into subtasks with dependency tracking
+- **Agent delegation** — Sync/async inter-agent task delegation
+- **Quality gates** — Hook-based output validation
+- **Delegation history** — Queryable audit trail
+
+### Tools & Integrations
+- **File system** — Read, write, edit, list, search, glob
+- **Shell execution** — Safe command execution in containers
+- **Web tools** — Search and fetch web content
+- **Memory** — Persistent memory with RAG search
+- **Delegation tools** — Delegate to other agents
+
+### Messaging Channels
+- **Telegram** — Full integration with streaming, rich formatting, reactions, media
+- **Discord** — Channel integration with multi-bot support
+- **Channel-based teams** — Agents communicate via shared channels
+
+### Security
+- **Rate limiting** — Token bucket per user/IP
+- **Prompt injection detection** — Pattern-based detection
+- **Credential scrubbing** — Auto-redact API keys, tokens, passwords
+- **Shell deny patterns** — Blocks `curl|sh`, reverse shells, `eval $()`
+- **SSRF protection** — DNS pinning, blocked private IPs
+- **Container isolation** — Agents run in sandboxed containers
+
+### Programmable Skills
+- **Git-based merging** — Three-way merge via `git merge-file`
+- **Resolution caching** — `git rerere` caches conflict resolutions
+- **Structured operations** — Dependencies, env vars, configs aggregated programmatically
+- **Deterministic replay** — Reproduce exact installation from `state.yaml`
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/qwibitai/NanoClaw.git
-cd NanoClaw
-claude
+git clone https://github.com/your-org/jimmyclaw.git
+cd jimmyclaw
+bun install
+bun run dev
 ```
 
-Then run `/setup`. Claude Code handles everything: dependencies, authentication, container setup and service configuration.
+Then run `/setup` in Claude Code. Claude handles dependencies, authentication, container setup and service configuration.
 
-## Philosophy
+## Configuration
 
-**Small enough to understand.** One process, a few source files and no microservices. If you want to understand the full NanoClaw codebase, just ask Claude Code to walk you through it.
+### Environment Variables
 
-**Secure by isolation.** Agents run in Linux containers (Apple Container on macOS, or Docker) and they can only see what's explicitly mounted. Bash access is safe because commands run inside the container, not on your host.
+**Provider API Keys** (set at least one)
 
-**Built for the individual user.** NanoClaw isn't a monolithic framework; it's software that fits each user's exact needs. Instead of becoming bloatware, NanoClaw is designed to be bespoke. You make your own fork and have Claude Code modify it to match your needs.
+| Variable | Provider |
+|----------|----------|
+| `ANTHROPIC_API_KEY` | Anthropic Claude |
+| `OPENAI_API_KEY` | OpenAI |
+| `GEMINI_API_KEY` | Google Gemini |
+| `OPENROUTER_API_KEY` | OpenRouter (recommended) |
+| `DEEPSEEK_API_KEY` | DeepSeek |
+| `GROQ_API_KEY` | Groq |
 
-**Customization = code changes.** No configuration sprawl. Want different behavior? Modify the code. The codebase is small enough that it's safe to make changes.
+**Gateway & Application**
 
-**AI-native.**
-- No installation wizard; Claude Code guides setup.
-- No monitoring dashboard; ask Claude what's happening.
-- No debugging tools; describe the problem and Claude fixes it.
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ASSISTANT_NAME` | Trigger word | `Andy` |
+| `TRIGGER_PATTERN` | Regex for trigger | `@(\w+)` |
+| `SWARM_ENABLED` | Enable agent swarm | `false` |
+| `IDLE_TIMEOUT` | Container idle timeout (ms) | `1800000` |
 
-**Skills over features.** Instead of adding features (e.g. support for Telegram) to the codebase, contributors submit [claude code skills](https://code.claude.com/docs/en/skills) like `/add-telegram` that transform your fork. You end up with clean code that does exactly what you need.
+**Messaging Channels**
 
-**Best harness, best model.** NanoClaw runs on the Claude Agent SDK, which means you're running Claude Code directly. Claude Code is highly capable and its coding and problem-solving capabilities allow it to modify and expand NanoClaw and tailor it to each user.
+| Variable | Description |
+|----------|-------------|
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token |
+| `DISCORD_BOT_TOKEN` | Discord bot token |
+| `TELEGRAM_BOT_POOL` | Additional bot tokens for swarm (JSON array) |
 
-## What It Supports
+**Container**
 
-### Core Features
-- **Messenger I/O** - Message NanoClaw from your phone. Supports Telegram, Discord, Slack, Signal and headless operation.
-- **Isolated group context** - Each group has its own `CLAUDE.md` memory, isolated filesystem, and runs in its own container sandbox with only that filesystem mounted to it.
-- **Main channel** - Your private channel (self-chat) for admin control; every group is completely isolated
-- **Scheduled tasks** - Recurring jobs that run Claude and can message you back
-- **Web access** - Search and fetch content from the Web
-- **Container isolation** - Agents are sandboxed in Apple Container (macOS) or Docker (macOS/Linux)
-- **Agent Swarms** - Spin up teams of specialized agents that collaborate on complex tasks. NanoClaw is the first personal AI assistant to support agent swarms.
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CONTAINER_RUNTIME` | `docker` or `apple` | `docker` |
 
-### Built-in Intelligence Features
+### Swarm Configuration
 
-- **Anti-hallucination rules** - Agent verifies facts before answering, cites sources with `Source: filename.md#section` format, and admits "I don't have this information" when unknown. Reduces AI hallucinations for contact info, schedules, and other factual queries.
+```yaml
+# swarm-config.yaml
+leader:
+  id: andy
+  role: leader
+  model: claude-sonnet-4
+  fallbackModel: gemini-2.0-flash
 
-- **Persistent Memory** - Structured memory system with:
-  - `MEMORY.md` - Long-term curated facts (preferences, contacts, decisions)
-  - `memory/YYYY-MM-DD.md` - Daily session logs (append-only)
-  - `knowledge/` - Structured data files (customers, projects, preferences)
+workers:
+  - id: sarah
+    role: researcher
+    model: claude-haiku-4
+  - id: mike
+    role: coder
+    model: claude-sonnet-4
+  - id: emma
+    role: reviewer
+    model: claude-opus-4
 
-- **Sub-Agent Model Config** - Cost-optimized sub-agents via `agent-config.json`:
-  - `researcher` → Haiku (fast, cheap lookups)
-  - `coder` → Sonnet (code implementation)
-  - `reviewer` → Opus (quality checks)
-  
-- **RAG Integration** - Hybrid search (BM25 + vector) over memory files:
-  - `memory_search` - Semantic search with citations
-  - `memory_get` - Read specific files/sections
-  - `memory_reindex` - Rebuild search index
-  - `memory_stats` - View index statistics
+teamChannel:
+  platform: discord
+  channelId: "123456789"
+  enabled: true
 
-### Optional Integrations
-- Add Gmail (`/add-gmail`) and more via skills
+maxParallelTasks: 4
+taskTimeoutMs: 300000
+```
+
+## CLI Commands
+
+```bash
+# Service management
+jimmyclaw service start     # Start daemon
+jimmyclaw service stop      # Stop daemon
+jimmyclaw service status    # Check status
+jimmyclaw service restart   # Restart daemon
+
+# Agent management
+jimmyclaw agents list       # List agents
+jimmyclaw agents add        # Add agent
+jimmyclaw agents remove     # Remove agent
+
+# Task management
+jimmyclaw tasks list        # List pending tasks
+jimmyclaw tasks cancel      # Cancel task
+
+# Configuration
+jimmyclaw config show       # Show current config
+jimmyclaw config reload     # Reload configuration
+
+# Logs
+jimmyclaw logs tail         # Stream logs
+jimmyclaw logs show         # Show recent logs
+
+# Interactive dashboard
+jimmyclaw dashboard         # Launch TUI dashboard
+```
+
+## Directory Structure
+
+```
+project/
+  src/
+    index.ts                    # Main orchestrator
+    api-server.ts               # Unix socket API server (for CLI)
+    swarm.ts                    # Swarm mode entry point
+    swarm-config.ts             # Swarm configuration loader
+    swarm-commands.ts           # Swarm slash command handler
+    container-runner.ts         # Container lifecycle
+    group-queue.ts              # Per-group concurrency
+    task-scheduler.ts           # Scheduled tasks
+    db.ts                       # SQLite operations
+    config.ts                   # Environment config
+    router.ts                   # Message formatting and routing
+    orchestrator/
+      index.ts                  # Agent orchestrator
+      task-queue.ts             # Task management
+      agent-registry.ts         # Agent registration
+      messenger.ts              # Inter-agent messaging
+      memory.ts                 # Shared memory
+      role-registry.ts          # Role-based routing
+      task-planner.ts           # Complex task decomposition
+      task-context-store.ts     # Task context persistence
+      progress-reporter.ts      # Task progress reporting
+      clarification-handler.ts  # Clarification request handling
+      channel-messenger.ts      # Discord/Telegram team channels
+      llm-provider.ts           # Multi-provider LLM interface
+    delegation/
+      manager.ts                # Delegation lifecycle
+      link-store.ts             # Permission links
+      tools.ts                  # Delegation tools
+      history-store.ts          # Audit trail
+    quality/
+      gates.ts                  # Quality gate engine
+      evaluate-loop.ts          # Generator-evaluator loop
+    scheduler/
+      scheduler.ts              # Cron scheduler
+      queue.ts                  # Scheduler queue
+      lane.ts                   # Per-group scheduler lanes
+    security/
+      rate-limiter.ts           # Token bucket
+      injection-detect.ts       # Prompt injection
+      scrubber.ts               # Credential scrubbing
+      shell-deny.ts             # Shell command filtering
+      ssrf.ts                   # SSRF protection
+    tracing/
+      collector.ts              # In-memory trace collection
+    channels/
+      telegram.ts               # Telegram integration
+      discord.ts                # Discord integration
+    cli/
+      index.ts                  # CLI entry point (jimmyclaw)
+      commands/                 # service, agents, tasks, logs, config, channel, env
+      tui/                      # Interactive TUI dashboard
+  groups/
+    main/
+      CLAUDE.md                 # System prompt
+      MEMORY.md                 # Long-term memory
+      memory/                   # Daily logs
+    <group-folder>/             # Per-group context
+  skills-engine/                # Git-merge skill system (apply, rebase, replay, etc.)
+  .jimmyclaw/
+    base/                       # Clean core (for skill merging)
+    backup/                     # Pre-apply backups
+    state.yaml                  # Full installation state
+    custom/                     # Custom overrides
+```
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/index.ts` | Orchestrator: state, message loop, agent invocation |
+| `src/orchestrator/index.ts` | Swarm mode: task routing, agent coordination |
+| `src/delegation/manager.ts` | Inter-agent delegation lifecycle |
+| `src/quality/gates.ts` | Quality gate validation engine |
+| `src/channels/telegram.ts` | Telegram bot integration |
+| `src/channels/discord.ts` | Discord bot integration |
+| `src/container-runner.ts` | Spawns streaming agent containers |
+| `src/api-server.ts` | Unix socket API server for CLI communication |
+| `src/swarm-config.ts` | Swarm configuration loader/writer |
+| `src/scheduler/scheduler.ts` | Cron-based task scheduler |
+| `src/task-scheduler.ts` | Runs scheduled tasks |
+| `src/db.ts` | SQLite operations |
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| Runtime | Bun 1.2+ |
+| Language | TypeScript |
+| Database | SQLite (bun:sqlite) |
+| Container | Docker / Apple Container |
+| LLM | Anthropic, OpenAI, Gemini, OpenRouter |
+| Telegram | grammy |
+| Discord | discord.js |
 
 ## Usage
 
 Talk to your assistant with the trigger word (default: `@Andy`):
 
 ```
-@Andy send an overview of the sales pipeline every weekday morning at 9am (has access to my Obsidian vault folder)
-@Andy review the git history for the past week each Friday and update the README if there's drift
-@Andy every Monday at 8am, compile news on AI developments from Hacker News and TechCrunch and message me a briefing
+@Andy send an overview of the sales pipeline every weekday morning at 9am
+@Andy review the git history for the past week
 @Andy search my memory for all customer preferences
 ```
 
-From the main channel (your self-chat), you can manage groups and tasks:
+With swarm mode enabled, complex tasks are automatically decomposed:
+
 ```
-@Andy list all scheduled tasks across groups
-@Andy pause the Monday briefing task
-@Andy join the Family Chat group
+@Andy research competitor pricing, write a comparison report, and have it reviewed
 ```
 
-## Customizing
+## Development
 
-NanoClaw doesn't use configuration files. To make changes, just tell Claude Code what you want:
-
-- "Change the trigger word to @Bob"
-- "Remember in the future to make responses shorter and more direct"
-- "Add a custom greeting when I say good morning"
-- "Store conversation summaries weekly"
-
-Or run `/customize` for guided changes.
-
-The codebase is small enough that Claude can safely modify it.
-
-## Contributing
-
-**Don't add features. Add skills.**
-
-If you want to add Telegram support, don't create a PR that adds Telegram alongside WhatsApp. Instead, contribute a skill file (`.claude/skills/add-telegram/SKILL.md`) that teaches Claude Code how to transform a NanoClaw installation to use Telegram.
-
-Users then run `/add-telegram` on their fork and get clean code that does exactly what they need, not a bloated system trying to support every use case.
-
-### RFS (Request for Skills)
-
-Skills we'd like to see:
-
-**Communication Channels**
-- `/add-slack` - Add Slack
-
-**Session Management**
-- `/clear` - Add a `/clear` command that compacts the conversation (summarizes context while preserving critical information in the same session). Requires figuring out how to trigger compaction programmatically via the Claude Agent SDK.
+```bash
+bun run dev          # Run with hot reload
+bun run build        # Compile TypeScript
+bun test             # Run tests
+./container/build.sh # Rebuild agent container
+```
 
 ## Requirements
 
 - macOS or Linux
 - [Bun](https://bun.sh) 1.2+ (not Node.js)
 - [Claude Code](https://claude.ai/download)
-- [Apple Container](https://github.com/apple/container) (macOS) or [Docker](https://docker.com/products/docker-desktop) (macOS/Linux)
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              NANOCLAW ARCHITECTURE                          │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌──────────────┐     ┌──────────────┐     ┌────────────────────────────┐  │
-│  │  WhatsApp    │     │   SQLite     │     │    Container (Bun)         │  │
-│  │  (baileys)   │────▶│   Database   │────▶│  ┌──────────────────────┐  │  │
-│  └──────────────┘     └──────────────┘     │  │  Agent Runner        │  │  │
-│                                            │  │  (Claude Agent SDK)  │  │  │
-│  ┌──────────────┐     ┌──────────────┐     │  └──────────────────────┘  │  │
-│  │  Telegram    │     │   Message    │     │  ┌──────────────────────┐  │  │
-│  │  (grammy)    │────▶│   Queue      │────▶│  │  RAG Server         │  │  │
-│  └──────────────┘     └──────────────┘     │  │  (MCP: memory_*)    │  │  │
-│                                            │  └──────────────────────┘  │  │
-│  ┌──────────────┐                          │  ┌──────────────────────┐  │  │
-│  │  Other       │                          │  │  MCP Servers        │  │  │
-│  │  Channels    │                          │  │  (zai, web, etc)    │  │  │
-│  └──────────────┘                          │  └──────────────────────┘  │  │
-│                                            └────────────────────────────┘  │
-│                                                                             │
-│  Memory Structure (per-group):                                              │
-│  groups/main/                                                               │
-│  ├── CLAUDE.md           # System prompt                                    │
-│  ├── MEMORY.md           # Long-term facts                                  │
-│  ├── memory/             # Daily logs                                       │
-│  ├── knowledge/          # Structured data                                  │
-│  ├── agent-config.json   # Sub-agent model config                          │
-│  └── conversations/      # Archived sessions                                │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-Single Bun process. Agents execute in isolated Linux containers with filesystem isolation. Only mounted directories are accessible. Per-group message queue with concurrency control. IPC via filesystem.
-
-### Key Files
-
-| File | Purpose |
-|------|---------|
-| `src/index.ts` | Orchestrator: state, message loop, agent invocation |
-| `src/channels/whatsapp.ts` | WhatsApp connection, auth, send/receive |
-| `src/channels/telegram.ts` | Telegram bot integration |
-| `src/ipc.ts` | IPC watcher and task processing |
-| `src/router.ts` | Message formatting and outbound routing |
-| `src/group-queue.ts` | Per-group queue with global concurrency limit |
-| `src/container-runner.ts` | Spawns streaming agent containers |
-| `src/task-scheduler.ts` | Runs scheduled tasks |
-| `src/db.ts` | SQLite operations (messages, groups, sessions, state) |
-| `container/agent-runner/` | Container-side agent runner (Bun) |
-| `container/rag-server/` | RAG MCP server for memory search |
-| `groups/*/CLAUDE.md` | Per-group system prompt |
-| `groups/*/MEMORY.md` | Per-group long-term memory |
-| `groups/*/agent-config.json` | Sub-agent model configuration |
-
-### Tech Stack
-
-| Component | Technology |
-|-----------|------------|
-| Runtime | Bun 1.2+ |
-| Agent SDK | Claude Agent SDK |
-| Database | SQLite (bun:sqlite) |
-| Container | Docker / Apple Container |
-| RAG | BM25 (FTS5) + Vector Search |
-| Embeddings | OpenRouter / OpenAI API |
-| MCP | @modelcontextprotocol/sdk |
+- [Docker](https://docker.com) or [Apple Container](https://github.com/apple/container)
 
 ## FAQ
 
 **Why Bun instead of Node.js?**
 
-Bun provides faster startup, native SQLite support via `bun:sqlite`, and built-in TypeScript support. No more `node_modules` headaches with native modules like `better-sqlite3`.
+Bun provides faster startup, native SQLite support via `bun:sqlite`, and built-in TypeScript support. No more `node_modules` headaches with native modules.
 
-**Why Docker?**
+**Why SQLite instead of PostgreSQL?**
 
-Docker provides cross-platform support (macOS, Linux and even Windows via WSL2) and a mature ecosystem. On macOS, you can optionally switch to Apple Container via `/convert-to-apple-container` for a lighter-weight native runtime.
+SQLite is simpler to deploy, has no external dependencies, and is sufficient for personal/single-tenant use cases. Per-group isolation provides multi-tenancy at the application level.
 
-**Can I run this on Linux?**
+**How does container isolation work?**
 
-Yes. Docker is the default runtime and works on both macOS and Linux. Just run `/setup`.
+Agents run in Docker or Apple Container sandboxes. They can only access explicitly mounted directories. Bash commands run inside the container, not on your host.
 
-**Is this secure?**
+**How do skills work?**
 
-Agents run in containers, not behind application-level permission checks. They can only access explicitly mounted directories. You should still review what you're running, but the codebase is small enough that you actually can. See [docs/SECURITY.md](docs/SECURITY.md) for the full security model.
+Skills are applied via git three-way merge against a clean base. Conflicts are resolved through a three-level system: git rerere cache → Claude Code → user. All operations are deterministic and replayable.
 
-**Why no configuration files?**
+## Security
 
-We don't want configuration sprawl. Every user should customize NanoClaw so that the code does exactly what they want, rather than configuring a generic system. If you prefer having config files, you can tell Claude to add them.
+See [docs/SECURITY.md](docs/SECURITY.md) for the full security model.
 
-**How do I debug issues?**
-
-Ask Claude Code. "Why isn't the scheduler running?" "What's in the recent logs?" "Why did this message not get a response?" That's the AI-native approach that underlies NanoClaw.
-
-**Why isn't the setup working for me?**
-
-If you have issues, during setup, Claude will try to dynamically fix them. If that doesn't work, run `claude`, then run `/debug`. If Claude finds an issue that is likely affecting other users, open a PR to modify the setup SKILL.md.
-
-**What changes will be accepted into the codebase?**
-
-Only security fixes, bug fixes, and clear improvements will be accepted to the base configuration. That's all.
-
-Everything else (new capabilities, OS compatibility, hardware support, enhancements) should be contributed as skills.
-
-This keeps the base system minimal and lets every user customize their installation without inheriting features they don't want.
-
-## Environment Variables
-
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `CLAUDE_CODE_OAUTH_TOKEN` | Yes* | Claude subscription auth |
-| `ANTHROPIC_API_KEY` | Yes* | Direct API key |
-| `Z_AI_API_KEY` | Optional | Z.ai backend (alternative to Claude) |
-| `OPENROUTER_API_KEY` | Optional | RAG embeddings (falls back to Z_AI_API_KEY) |
-
-*One of `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` is required.
+- **Container isolation** — Agents run in sandboxes, not behind application-level permission checks
+- **5-layer defense** — Rate limiting, injection detection, credential scrubbing, shell deny, SSRF protection
+- **Small codebase** — Understandable security surface
 
 ## Community
 

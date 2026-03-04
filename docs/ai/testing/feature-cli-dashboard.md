@@ -10,7 +10,7 @@ description: Testing strategy for CLI dashboard
 
 - Unit tests: API handler functions, message parser, formatter
 - Integration tests: CLI commands → socket → daemon response
-- E2E: Toàn bộ workflow từ `nanoclaw agent add` đến agent hoạt động
+- E2E: Toàn bộ workflow từ `jimmyclaw agent add` đến agent hoạt động
 
 ---
 
@@ -141,25 +141,25 @@ describe('CLI integration', () => {
 
   afterAll(() => mockServer.close());
 
-  it('nanoclaw status in ra thông tin đúng', async () => {
+  it('jimmyclaw status in ra thông tin đúng', async () => {
     const output = await runCli(['status'], { NANOCLAW_SOCKET: TEST_SOCKET_PATH });
-    expect(output).toContain('NanoClaw');
+    expect(output).toContain('JimmyClaw');
     expect(output).toMatch(/running|stopped/);
   });
 
-  it('nanoclaw agents in danh sách agents', async () => {
+  it('jimmyclaw agents in danh sách agents', async () => {
     const output = await runCli(['agents'], { NANOCLAW_SOCKET: TEST_SOCKET_PATH });
     expect(output).toContain('nam');
     expect(output).toContain('leader');
   });
 
-  it('nanoclaw status --json trả về JSON hợp lệ', async () => {
+  it('jimmyclaw status --json trả về JSON hợp lệ', async () => {
     const output = await runCli(['status', '--json'], { NANOCLAW_SOCKET: TEST_SOCKET_PATH });
     const parsed = JSON.parse(output);
     expect(parsed).toHaveProperty('status');
   });
 
-  it('nanoclaw agent add với args đầy đủ không cần prompt', async () => {
+  it('jimmyclaw agent add với args đầy đủ không cần prompt', async () => {
     const output = await runCli(
       ['agent', 'add', 'test-bot', 'researcher', 'glm-4.7-flash'],
       { NANOCLAW_SOCKET: TEST_SOCKET_PATH }
@@ -188,44 +188,44 @@ async function runCli(args: string[], env: Record<string, string> = {}): Promise
 ### Workflow: Thêm agent và kiểm tra hoạt động
 
 ```
-1. nanoclaw agent add duc coder glm-5    → ✓ added
-2. nanoclaw agents                        → duc xuất hiện trong list
-3. nanoclaw status --json                 → agents.total tăng lên
-4. nanoclaw agent remove duc             → ✓ removed
-5. nanoclaw agents                        → duc không còn trong list
+1. jimmyclaw agent add duc coder glm-5    → ✓ added
+2. jimmyclaw agents                        → duc xuất hiện trong list
+3. jimmyclaw status --json                 → agents.total tăng lên
+4. jimmyclaw agent remove duc             → ✓ removed
+5. jimmyclaw agents                        → duc không còn trong list
 ```
 
 ### Workflow: Config thay đổi persistent
 
 ```
-1. nanoclaw config set maxParallelTasks 6
+1. jimmyclaw config set maxParallelTasks 6
 2. Daemon restart
-3. nanoclaw config show                   → maxParallelTasks: 6 vẫn còn
+3. jimmyclaw config show                   → maxParallelTasks: 6 vẫn còn
 ```
 
 ### Workflow: Daemon không chạy
 
 ```
 1. Stop daemon
-2. nanoclaw status                        → "Daemon không chạy. Dùng: nanoclaw start"
-3. nanoclaw start                         → daemon khởi động
-4. nanoclaw status                        → running
+2. jimmyclaw status                        → "Daemon không chạy. Dùng: jimmyclaw start"
+3. jimmyclaw start                         → daemon khởi động
+4. jimmyclaw status                        → running
 ```
 
 ---
 
 ## Test Checklist
 
-- [ ] `nanoclaw status` in đúng thông tin
-- [ ] `nanoclaw status --json` output là valid JSON
-- [ ] `nanoclaw agents` hiển thị đúng danh sách
-- [ ] `nanoclaw agent add <id> <role> <model>` thêm thành công
-- [ ] `nanoclaw agent add` (không args) mở interactive prompt
-- [ ] `nanoclaw agent remove <id>` có confirm trước khi xóa
-- [ ] `nanoclaw config set <key> <value>` persist sau restart
-- [ ] `nanoclaw logs` stream realtime không block
-- [ ] `nanoclaw logs --agent <id>` chỉ hiện log của agent đó
-- [ ] `nanoclaw start/stop/restart` quản lý daemon đúng
+- [ ] `jimmyclaw status` in đúng thông tin
+- [ ] `jimmyclaw status --json` output là valid JSON
+- [ ] `jimmyclaw agents` hiển thị đúng danh sách
+- [ ] `jimmyclaw agent add <id> <role> <model>` thêm thành công
+- [ ] `jimmyclaw agent add` (không args) mở interactive prompt
+- [ ] `jimmyclaw agent remove <id>` có confirm trước khi xóa
+- [ ] `jimmyclaw config set <key> <value>` persist sau restart
+- [ ] `jimmyclaw logs` stream realtime không block
+- [ ] `jimmyclaw logs --agent <id>` chỉ hiện log của agent đó
+- [ ] `jimmyclaw start/stop/restart` quản lý daemon đúng
 - [ ] CLI in thông báo rõ ràng khi daemon không chạy
 - [ ] TUI mở không lỗi
 - [ ] TUI `q` thoát, daemon vẫn chạy

@@ -22,7 +22,7 @@
    export type TaskType = 'research' | 'code' | 'review' | 'write' | 'general' | 'done' | 'assign' | 'ask' | 'answer' | 'status' | 'plan' | 'artifact';
    ```
 
-2. **`channel-messenger.ts`**: Update `parseMessage()` to detect `[nanoclaw:TYPE]` prefix in message text. Extract JSON payload after prefix.
+2. **`channel-messenger.ts`**: Update `parseMessage()` to detect `[jimmyclaw:TYPE]` prefix in message text. Extract JSON payload after prefix.
 
 3. **`index.ts` `handleChannelMessage()`**: Add cases:
    - `assign`: find target agent by id/role, call `delegateViaChannel()` with subtask description
@@ -30,7 +30,7 @@
 
 4. **`delegateViaChannel()`**: Accept optional `subtaskId` param, include in the message sent to channel so reply can be correlated.
 
-**Test**: Leader manually sends `[nanoclaw:assign]` message → target worker picks it up → posts `[nanoclaw:done]` → leader receives result.
+**Test**: Leader manually sends `[jimmyclaw:assign]` message → target worker picks it up → posts `[jimmyclaw:done]` → leader receives result.
 
 ---
 
@@ -106,7 +106,7 @@
      private pending = new Map<string, ClarificationRequest>();
 
      async ask(taskId: string, agentId: string, question: string, timeoutMs = 300_000): Promise<string> {
-       // Post [nanoclaw:ask] to channel (via channel messenger)
+       // Post [jimmyclaw:ask] to channel (via channel messenger)
        // Return promise that resolves when handleAnswer() called
        // Timeout: resolve with "[no answer - proceeding with best guess]"
      }
@@ -117,15 +117,15 @@
    }
    ```
 
-2. **`index.ts`** `executeTask()`: Pass `ClarificationHandler.ask` as a capability to the agent's system prompt context. Agent can include `[nanoclaw:ask] {"question": "..."}` in its output.
+2. **`index.ts`** `executeTask()`: Pass `ClarificationHandler.ask` as a capability to the agent's system prompt context. Agent can include `[jimmyclaw:ask] {"question": "..."}` in its output.
 
-   Alternatively: after each LLM response chunk, check if response contains `[nanoclaw:ask]` and pause.
+   Alternatively: after each LLM response chunk, check if response contains `[jimmyclaw:ask]` and pause.
 
 3. **`handleChannelMessage()`**: If `fromHuman=true` and `pendingClarifications.size > 0` for any active task → check if it's an answer → route to `ClarificationHandler.handleAnswer()`.
 
 4. Channel messenger posts the question with a `@user` mention so human gets notified.
 
-**Test**: Coder agent includes `[nanoclaw:ask] {"question": "Should I use JWT or sessions?"}` → channel shows question → user replies → coder continues with answer.
+**Test**: Coder agent includes `[jimmyclaw:ask] {"question": "Should I use JWT or sessions?"}` → channel shows question → user replies → coder continues with answer.
 
 ---
 
@@ -163,7 +163,7 @@
 
 5. **System prompt**: When creating agent context, auto-prepend role's `defaultPrompt` to the agent's custom `systemPrompt`.
 
-**Test**: Add new role "devops" to config → restart → `nanoclaw agent add` shows devops as option → task containing "deploy" routes to devops agent.
+**Test**: Add new role "devops" to config → restart → `jimmyclaw agent add` shows devops as option → task containing "deploy" routes to devops agent.
 
 ---
 
@@ -191,7 +191,7 @@
        if (now - last < this.THROTTLE_MS) return;
        this.lastReport.set(agentId, now);
 
-       const text = `[nanoclaw:status] ${JSON.stringify({ taskId, fromAgent: agentId, status, detail })}`;
+       const text = `[jimmyclaw:status] ${JSON.stringify({ taskId, fromAgent: agentId, status, detail })}`;
        await channelMessenger.sendAs(agentId, text);
      }
    }
@@ -239,7 +239,7 @@ Suggested order: **1 → 4 → 2 → 5 → 3**
 | File | Action | Phase |
 |------|--------|-------|
 | `src/orchestrator/types.ts` | Add message types, change AgentRole to string | 1, 4 |
-| `src/orchestrator/channel-messenger.ts` | Parse `[nanoclaw:TYPE]` prefix | 1 |
+| `src/orchestrator/channel-messenger.ts` | Parse `[jimmyclaw:TYPE]` prefix | 1 |
 | `src/orchestrator/index.ts` | Route new msg types, use planner, progress | 1,2,3,5 |
 | `src/orchestrator/task-planner.ts` | New: LLM-based task breakdown | 2 |
 | `src/orchestrator/task-context-store.ts` | New: track subtask state | 2 |

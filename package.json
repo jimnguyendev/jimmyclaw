@@ -1,11 +1,11 @@
 {
-  "name": "nanoclaw",
+  "name": "jimmyclaw",
   "version": "1.1.2",
   "description": "Personal Claude assistant. Lightweight, secure, customizable.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "nanoclaw": "./dist/cli/index.js"
+    "jimmyclaw": "./dist/cli/index.js"
   },
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target bun && bun run build:cli",

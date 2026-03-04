@@ -10,7 +10,7 @@ description: Technical implementation guide for the CLI dashboard
 
 **Prerequisites:**
 - Bun runtime
-- NanoClaw daemon đang chạy (để test socket API)
+- JimmyClaw daemon đang chạy (để test socket API)
 
 **Install dependencies:**
 ```bash
@@ -42,14 +42,14 @@ src/
     │   ├── api-client.ts          # Connect Unix socket → request/response
     │   └── formatter.ts           # chalk colors, table rendering, duration format
     ├── commands/
-    │   ├── status.ts              # nanoclaw status
-    │   ├── agents.ts              # nanoclaw agents / agent add|remove|rename|model
-    │   ├── tasks.ts               # nanoclaw tasks
-    │   ├── logs.ts                # nanoclaw logs [--agent] [--level] [--since]
-    │   ├── config.ts              # nanoclaw config show|set|edit|reset|reload
-    │   ├── channel.ts             # nanoclaw channel show|set|test
-    │   ├── service.ts             # nanoclaw start|stop|restart|service install
-    │   └── env.ts                 # nanoclaw env show|set|unset
+    │   ├── status.ts              # jimmyclaw status
+    │   ├── agents.ts              # jimmyclaw agents / agent add|remove|rename|model
+    │   ├── tasks.ts               # jimmyclaw tasks
+    │   ├── logs.ts                # jimmyclaw logs [--agent] [--level] [--since]
+    │   ├── config.ts              # jimmyclaw config show|set|edit|reset|reload
+    │   ├── channel.ts             # jimmyclaw channel show|set|test
+    │   ├── service.ts             # jimmyclaw start|stop|restart|service install
+    │   └── env.ts                 # jimmyclaw env show|set|unset
     ├── prompts/
     │   ├── agent-prompt.ts        # Wizard thêm/sửa agent
     │   └── config-prompt.ts       # Wizard sửa config settings
@@ -136,7 +136,7 @@ export class ApiClient {
   private async request(method: string, path: string, body?: unknown): Promise<unknown> {
     return new Promise((resolve, reject) => {
       if (!fs.existsSync(SOCKET_PATH)) {
-        reject(new Error('Daemon không chạy. Dùng: nanoclaw start'));
+        reject(new Error('Daemon không chạy. Dùng: jimmyclaw start'));
         return;
       }
 
@@ -185,7 +185,7 @@ if (process.argv.length === 2) {
 }
 
 // Nếu có argument → parse commands
-program.name('nanoclaw').version('2.0.0').description('NanoClaw CLI');
+program.name('jimmyclaw').version('2.0.0').description('JimmyClaw CLI');
 
 program.command('status').option('--json').action(...)
 // ... register all commands
@@ -197,7 +197,7 @@ program.parse();
 
 Output mặc định (human-readable):
 ```
-● NanoClaw  running  2d 4h 12m
+● JimmyClaw  running  2d 4h 12m
   Channel:  Discord #team-workspace
   Agents:   4 (3 idle, 1 busy)
   Tasks:    47 today  (42 ✓  5 ✗)
@@ -218,7 +218,7 @@ Output với `--json`:
 
 ### 5. Agent commands (`src/cli/commands/agents.ts`)
 
-`nanoclaw agents` — dùng `cli-table3`:
+`jimmyclaw agents` — dùng `cli-table3`:
 ```
 ┌────────┬────────────┬──────────────────┬────────┬──────────┐
 │ ID     │ Role       │ Model            │ Status │ Tasks    │
@@ -230,7 +230,7 @@ Output với `--json`:
 └────────┴────────────┴──────────────────┴────────┴──────────┘
 ```
 
-`nanoclaw agent add` — không có args → trigger `promptNewAgent()`:
+`jimmyclaw agent add` — không có args → trigger `promptNewAgent()`:
 ```typescript
 export async function agentAddCmd(id?: string, role?: string, model?: string) {
   const args = await promptNewAgent({ id, role, model });
@@ -279,7 +279,7 @@ function App() {
     <Box flexDirection="column" height={process.stdout.rows}>
       {/* Header bar */}
       <Box borderStyle="single" paddingX={1}>
-        <Text bold color="cyan">NanoClaw</Text>
+        <Text bold color="cyan">JimmyClaw</Text>
         <Text>  ● Running  </Text>
         <Text dimColor>[q]uit [a]dd [e]dit [r]emove [l]ogs [?]help</Text>
       </Box>
@@ -310,7 +310,7 @@ render(<App />);
 ```json
 {
   "bin": {
-    "nanoclaw": "./dist/cli/index.js"
+    "jimmyclaw": "./dist/cli/index.js"
   },
   "scripts": {
     "build:cli": "bun build src/cli/index.ts --outdir dist/cli --target bun --sourcemap"
@@ -320,7 +320,7 @@ render(<App />);
 
 Để dùng globally:
 ```bash
-bun link         # link nanoclaw vào PATH
+bun link         # link jimmyclaw vào PATH
 # hoặc
 npm install -g . # nếu dùng npm
 ```

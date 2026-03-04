@@ -16,7 +16,7 @@ AI models (especially older/smaller ones) can generate plausible-sounding but in
 - Presenting speculation as fact
 
 **Who is affected?**
-- All NanoClaw users who rely on factual accuracy
+- All JimmyClaw users who rely on factual accuracy
 - Users with older/smaller models (more prone to hallucination)
 - Users in high-stakes scenarios (scheduling, contact info)
 

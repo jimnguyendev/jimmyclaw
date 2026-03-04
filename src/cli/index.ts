@@ -22,9 +22,9 @@ import { openTui } from './tui/app.js';
 const program = new Command();
 
 program
-  .name('nanoclaw')
+  .name('jimmyclaw')
   .version('2.0.0')
-  .description('NanoClaw CLI - Manage agent swarms from terminal');
+  .description('JimmyClaw CLI - Manage agent swarms from terminal');
 
 // Status commands
 program

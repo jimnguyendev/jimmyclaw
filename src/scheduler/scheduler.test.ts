@@ -169,10 +169,10 @@ describe('defaultLanes', () => {
   });
 
   test('reads env vars for concurrency', () => {
-    process.env.NANOCLAW_LANE_MAIN = '50';
+    process.env.JIMMYCLAW_LANE_MAIN = '50';
     const lanes = defaultLanes();
     const mainLane = lanes.find((l) => l.name === 'main');
     expect(mainLane?.concurrency).toBe(50);
-    delete process.env.NANOCLAW_LANE_MAIN;
+    delete process.env.JIMMYCLAW_LANE_MAIN;
   });
 });

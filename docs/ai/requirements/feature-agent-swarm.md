@@ -11,7 +11,7 @@ implemented_at: 2026-02-28
 ## Problem Statement
 **What problem are we solving?**
 
-NanoClaw hiện tại chạy single agent (Claude) cho tất cả tasks. Điều này tạo ra:
+JimmyClaw hiện tại chạy single agent (Claude) cho tất cả tasks. Điều này tạo ra:
 
 1. **No parallelization** - Tasks phải xử lý sequential
 2. **Cost inefficiency** - Tất cả requests dùng Claude, không tận dụng free models

@@ -1,4 +1,4 @@
-# NanoClaw
+# JimmyClaw
 
 Personal Claude assistant. See [README.md](README.md) for philosophy and setup. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for architecture decisions.
 
@@ -28,31 +28,40 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `/setup` | First-time installation, authentication, service configuration |
 | `/customize` | Adding channels, integrations, changing behavior |
 | `/debug` | Container issues, logs, troubleshooting |
-| `/update` | Pull upstream NanoClaw changes, merge with customizations, run migrations |
+| `/update` | Pull upstream JimmyClaw changes, merge with customizations, run migrations |
 | `/qodo-pr-resolver` | Fetch and fix Qodo PR review issues interactively or in batch |
 | `/get-qodo-rules` | Load org- and repo-level coding rules from Qodo before code tasks |
 
 ## Development
 
+**IMPORTANT: This project uses Bun.js runtime, NOT npm/node.**
+
+Always use `bun` commands instead of `npm`:
+- `bun install` instead of `npm install`
+- `bun run dev` instead of `npm run dev`
+- `bun run build` instead of `npm run build`
+- `bun test` instead of `npm test`
+- `bunx` instead of `npx`
+
 Run commands directly—don't tell the user to run them.
 
 ```bash
-npm run dev          # Run with hot reload
-npm run build        # Compile TypeScript
+bun run dev          # Run with hot reload
+bun run build        # Compile TypeScript
 ./container/build.sh # Rebuild agent container
 ```
 
 Service management:
 ```bash
 # macOS (launchd)
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw  # restart
+launchctl load ~/Library/LaunchAgents/com.jimmyclaw.plist
+launchctl unload ~/Library/LaunchAgents/com.jimmyclaw.plist
+launchctl kickstart -k gui/$(id -u)/com.jimmyclaw  # restart
 
 # Linux (systemd)
-systemctl --user start nanoclaw
-systemctl --user stop nanoclaw
-systemctl --user restart nanoclaw
+systemctl --user start jimmyclaw
+systemctl --user stop jimmyclaw
+systemctl --user restart jimmyclaw
 ```
 
 ## Container Build Cache

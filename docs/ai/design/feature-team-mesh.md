@@ -43,13 +43,13 @@ type AgentMessageType =
   | 'done'       // existing: subtask complete with result
 
 // Message body format (JSON in channel message):
-// [nanoclaw:plan] { taskId, subtasks: [{id, role, description, deps}] }
-// [nanoclaw:assign] { taskId, subtaskId, toAgent, description }
-// [nanoclaw:ask] { taskId, subtaskId, fromAgent, question }
-// [nanoclaw:answer] { taskId, subtaskId, toAgent, answer }
-// [nanoclaw:status] { taskId, fromAgent, status: "thinking"|"working"|"done", detail? }
-// [nanoclaw:artifact] { taskId, key, summary }
-// [nanoclaw:done] { taskId, subtaskId?, result }
+// [jimmyclaw:plan] { taskId, subtasks: [{id, role, description, deps}] }
+// [jimmyclaw:assign] { taskId, subtaskId, toAgent, description }
+// [jimmyclaw:ask] { taskId, subtaskId, fromAgent, question }
+// [jimmyclaw:answer] { taskId, subtaskId, toAgent, answer }
+// [jimmyclaw:status] { taskId, fromAgent, status: "thinking"|"working"|"done", detail? }
+// [jimmyclaw:artifact] { taskId, key, summary }
+// [jimmyclaw:done] { taskId, subtaskId?, result }
 ```
 
 ## Component Design
@@ -159,7 +159,7 @@ class ProgressReporter {
 
   async reportStatus(agentId: string, taskId: string, status: string, detail?: string): Promise<void>
   // Throttled: skips if last report < THROTTLE_MS ago
-  // Posts [nanoclaw:status] message to channel
+  // Posts [jimmyclaw:status] message to channel
 }
 ```
 
@@ -244,17 +244,17 @@ case 'done': existing logic + check TaskContextStore.isComplete
      ]
    }
 
-4. Leader posts [nanoclaw:plan] to channel (visible to team + user)
+4. Leader posts [jimmyclaw:plan] to channel (visible to team + user)
 
 5. Leader dispatches s1 (sarah/researcher) — no deps
 
-6. Sarah completes s1 → posts [nanoclaw:done] with result
+6. Sarah completes s1 → posts [jimmyclaw:done] with result
    TaskContextStore records result, s2 and (conceptually s4) now unblocked
 
 7. Leader dispatches s2 (mike/coder) with s1 result as context
    Simultaneously dispatches s4 preparation if possible
 
-8. Mike mid-task: unsure about auth format → posts [nanoclaw:ask]
+8. Mike mid-task: unsure about auth format → posts [jimmyclaw:ask]
    User replies → ClarificationHandler resolves → Mike continues
 
 9. Mike completes s2 → done, s3 and s4 now runnable in parallel

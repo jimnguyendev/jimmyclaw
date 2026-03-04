@@ -9,7 +9,7 @@ description: Implement hybrid search (BM25 + vector) for memory and knowledge re
 ## Problem Statement
 **What problem are we solving?**
 
-NanoClaw's current memory search is limited to exact file matching and grep. This causes:
+JimmyClaw's current memory search is limited to exact file matching and grep. This causes:
 - Missed context when user queries use different wording than stored text
 - No semantic understanding of related concepts
 - Poor recall for large knowledge bases

@@ -9,7 +9,7 @@ status: planned
 
 ## Bối cảnh
 
-Agents hiện giao tiếp qua SQLite message queue ẩn — người dùng không thấy. Khi chạy nhiều NanoClaw instance trên nhiều VPS, agents giữa các instance không thể phối hợp. Mục tiêu: dùng Discord hoặc Telegram channel làm kênh giao tiếp chính, visible và cross-VPS.
+Agents hiện giao tiếp qua SQLite message queue ẩn — người dùng không thấy. Khi chạy nhiều JimmyClaw instance trên nhiều VPS, agents giữa các instance không thể phối hợp. Mục tiêu: dùng Discord hoặc Telegram channel làm kênh giao tiếp chính, visible và cross-VPS.
 
 ## Yêu cầu chức năng
 

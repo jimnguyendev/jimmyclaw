@@ -1,8 +1,8 @@
-# NanoClaw Architecture
+# JimmyClaw Architecture
 
 ## Overview
 
-NanoClaw is a lightweight, secure, and customizable personal Claude assistant that bridges messaging platforms (WhatsApp, Telegram) with containerized AI agent execution. The system enables users to interact with Claude AI from group chats while maintaining security through container isolation.
+JimmyClaw is a lightweight, secure, and customizable personal Claude assistant that bridges messaging platforms (WhatsApp, Telegram) with containerized AI agent execution. The system enables users to interact with Claude AI from group chats while maintaining security through container isolation.
 
 **Technology Stack:**
 - Runtime: Bun (TypeScript)
@@ -109,9 +109,9 @@ Spawns and manages Docker containers for AI agent execution:
 **Output Streaming:**
 Uses sentinel markers for robust parsing:
 ```
----NANOCLAW_OUTPUT_START---
+---JIMMYCLAW_OUTPUT_START---
 {...json...}
----NANOCLAW_OUTPUT_END---
+---JIMMYCLAW_OUTPUT_END---
 ```
 
 #### 5. Task Scheduler (`src/task-scheduler.ts`)

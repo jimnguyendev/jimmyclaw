@@ -103,10 +103,10 @@ export class Lane {
 
 export function defaultLanes(): LaneConfig[] {
   return [
-    { name: LANE_NAMES.MAIN, concurrency: envInt('NANOCLAW_LANE_MAIN', 30) },
-    { name: LANE_NAMES.SUBAGENT, concurrency: envInt('NANOCLAW_LANE_SUBAGENT', 50) },
-    { name: LANE_NAMES.DELEGATE, concurrency: envInt('NANOCLAW_LANE_DELEGATE', 100) },
-    { name: LANE_NAMES.CRON, concurrency: envInt('NANOCLAW_LANE_CRON', 30) },
+    { name: LANE_NAMES.MAIN, concurrency: envInt('JIMMYCLAW_LANE_MAIN', 30) },
+    { name: LANE_NAMES.SUBAGENT, concurrency: envInt('JIMMYCLAW_LANE_SUBAGENT', 50) },
+    { name: LANE_NAMES.DELEGATE, concurrency: envInt('JIMMYCLAW_LANE_DELEGATE', 100) },
+    { name: LANE_NAMES.CRON, concurrency: envInt('JIMMYCLAW_LANE_CRON', 30) },
   ];
 }
 

@@ -7,6 +7,11 @@
 - Language: Vietnamese (Tiếng Việt)
 - Timezone: UTC+7 (Vietnam)
 - **IMPORTANT**: Search using Vietnamese or English sources, NOT Chinese
+- **Project Runtime**: This project uses **Bun.js** (NOT npm/node). Always use `bun` commands:
+  - `bun install` instead of `npm install`
+  - `bun run` instead of `npm run`
+  - `bun test` instead of `npm test`
+  - `bunx` instead of `npx`
 
 ## Personal Information
 - Tên: Nam
